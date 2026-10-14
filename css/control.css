@@ -3,7 +3,7 @@ body { overflow-y: auto; min-height: 100dvh; background: radial-gradient(ellipse
 .login { min-height: 100dvh; display: grid; place-items: center; padding: 20px; }
 .login .back { color: var(--muted); font-size: 14px; }
 #app { max-width: 760px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 90px); }
-.gmtop { display: flex; align-items: center; gap: 10px; padding: 6px 44px 10px 0; }
+.gmtop { display: flex; align-items: center; gap: 10px; padding: 6px 0 10px; }
 .gmtop .brand { flex: 1; color: #ffd166; font-size: 18px; }
 .gmtop .brand b { color: #fff; }
 .gmtop .pin { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
@@ -70,3 +70,11 @@ details summary { cursor: pointer; font-weight: 600; }
 .savebar span.warn { color: #ffd166; }
 .savebar .btn { padding: 12px 26px; }
 .toast { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 99; background: #2a1450; border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; max-width: 92vw; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+/* login card */
+.gm-card { width: min(380px, 100%); background: #1e1038; border: 1px solid var(--line); border-radius: 22px; padding: 22px; display: flex; flex-direction: column; gap: 10px; text-align: center; box-shadow: 0 24px 60px rgba(0, 0, 0, .6); }
+.gm-card .gm-icon { font-size: 40px; }
+.gm-card h3 { margin: 0; font-size: 24px; }
+.gm-card p { margin: 0; color: var(--muted); font-size: 14px; }
+.gm-card input { font: 700 22px var(--body); letter-spacing: 3px; text-align: center; text-transform: uppercase; padding: 12px; border-radius: 12px; border: 3px solid transparent; outline: none; color: #1d0f38; }
+.gm-err { min-height: 1.2em; color: #ff9aa4; font-weight: 600; font-size: 14px; }
+.qeditor .qe-savebar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px max(14px, calc(50% - 366px)) calc(env(safe-area-inset-bottom) + 12px); background: rgba(12, 5, 26, .94); border-top: 1px solid var(--line); }

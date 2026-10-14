@@ -2,9 +2,8 @@
 //  PLAYER (phone) — lightweight, no 3D
 // ============================================================
 import { AVATARS, ANSWER_STYLES, CONFIG, MASCOT } from './config.js';
-import { mountGameMasterButton } from './gm.js';
 import { createPlayerNet } from './net.js';
-import { SHAPES, el, avatarEl, ordinal } from './ui.js';
+import { SHAPES, el, avatarEl, ordinal, avatarSrc } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -36,6 +35,7 @@ let lastResultQ = -1;
 // ---------------- views ----------------
 function show(v) {
   view = v;
+  if (!STAGE_VIEWS[v]) stageOff();
   document.querySelectorAll('.view').forEach((n) => n.classList.toggle('hidden', n.id !== 'v-' + v));
   $('topbar').classList.toggle('hidden', v === 'join' || v === 'kicked');
   if (v !== 'result') document.body.classList.remove('good', 'bad');
@@ -145,19 +145,19 @@ const EVENT_TEXT = {
   clock: 'DONG… DONG… 🕛', blackout: 'I-it’s so dark… 👀',
 };
 const MS = $('ms');
-$('ms-mascot-img').src = MASCOT.sprite;
 let bubbleT = 0;
-function playStage(viewId, size, cls, bubble, bubbleAt = 0) {
-  const slot = document.querySelector(`#v-${viewId} .ms-slot`);
-  if (slot && MS.parentElement !== slot) slot.appendChild(MS);
-  MS.className = 'ministage ' + size;
+const STAGE_VIEWS = { walk: 'walk', pre: 'pre', locked: 'locked', result: 'result' };
+function playStage(mode, cls = '', bubble = '', bubbleAt = 0) {
+  $('ms-mascot-img').src = avatarSrc(me.avatar) || MASCOT.sprite; // the mascot is MY avatar
+  MS.className = `ministage on m-${mode}`;
   void MS.offsetWidth; // restart CSS animations
-  MS.className = `ministage ${size} ${cls}`;
+  MS.className = `ministage on m-${mode} ${cls}`;
   const b = $('ms-bubble');
   b.classList.remove('show');
   clearTimeout(bubbleT);
   if (bubble) bubbleT = setTimeout(() => { b.textContent = bubble; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }, bubbleAt);
 }
+function stageOff() { MS.classList.remove('on'); clearTimeout(bubbleT); }
 
 // ---------------- question ----------------
 function showWalk(m) {
@@ -165,7 +165,7 @@ function showWalk(m) {
   $('walk-num').textContent = `Question ${m.i + 1} of ${Q.total}`;
   show('walk');
   const ev = EVENTS[m.i % EVENTS.length];
-  playStage('walk', 'big', `walk ev ev-${ev}`, EVENT_TEXT[ev], 2400);
+  playStage('walk', `walk ev ev-${ev}`, EVENT_TEXT[ev], 2400);
 }
 
 function optChip(i, text, cls = 'preopt') {
@@ -185,6 +185,7 @@ function showPre(m) {
   box.innerHTML = '';
   Q.opts.forEach((o, i) => box.appendChild(optChip(i, o)));
   show('pre');
+  playStage('pre');
   const bar = $('pre-bar');
   bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)'; void bar.offsetWidth;
   bar.style.transition = `transform ${CONFIG.QUESTION_PREVIEW}s linear`; bar.style.transform = 'scaleX(0)';
@@ -199,7 +200,7 @@ function showLocked(choice, note) {
   else { const st = ANSWER_STYLES[choice]; p.style.setProperty('--c', st.color); p.innerHTML = `<span class="shape">${SHAPES[st.shape]}</span><span></span>`; p.lastChild.textContent = 'Your answer: ' + (Q.opts[choice] || ''); }
   $('locked-time').textContent = note || '';
   show('locked');
-  playStage('locked', 'small', 'idle');
+  playStage('locked');
 }
 
 function openAnswer(m, remainingMs) {
@@ -272,14 +273,15 @@ function showResult(res, q) {
   const ca = $('correct-ans');
   if (Q.correct != null && Q.opts && Q.opts[Q.correct] != null) {
     const st = ANSWER_STYLES[Q.correct];
-    ca.innerHTML = `Correct answer: <span class="shape" style="color:${st.color}">${SHAPES[st.shape]}</span> <b></b>`;
+    ca.innerHTML = `Correct answer: <span class="shape">${SHAPES[st.shape]}</span><b></b>`;
     ca.querySelector('b').textContent = Q.opts[Q.correct];
     ca.querySelector('svg *').setAttribute('fill', st.color);
     ca.classList.remove('hidden');
   } else ca.classList.add('hidden');
   show('result');
-  if (good) playStage('result', 'mid', q % 2 ? 'res-vortex' : 'res-shield', 'Phew! A mysterious force saved me ✨', 1300);
-  else playStage('result', 'mid', 'res-scare', ok === -1 ? 'Too slow… 😵' : 'Ouch… 😵‍💫', 1900);
+  // my own result decides my animation (not the room majority)
+  if (good) playStage('result', (q % 2 ? 'res-vortex' : 'res-shield') + ' tint-good', 'Phew! A mysterious force saved me ✨', 1300);
+  else playStage('result', 'res-scare tint-bad', ok === -1 ? 'Too slow… 😵' : 'Ouch… 😵‍💫', 1900);
   document.body.classList.toggle('good', good);
   document.body.classList.toggle('bad', !good);
   buzz(good ? [30, 40, 30] : [120]);
@@ -307,10 +309,6 @@ function showFinal(m) {
 
 // ---------------- boot ----------------
 buildJoin();
-mountGameMasterButton({
-  getRoom: () => room,
-  beforeLeave: () => { if (joined && net) net.send({ t: 'leave', id: pid }); sess.del('hq-joined'); },
-});
 $('btn-leave').onclick = () => {
   if (!confirm('Leave the game? Your score will be lost.')) return;
   if (net) net.send({ t: 'leave', id: pid });

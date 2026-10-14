@@ -1,60 +1,65 @@
-// ⚠ button (top-right) → game-master login → control.html
+// ============================================================
+//  Admin (game master) access
+//  - adminGate(): shown when someone opens the home page.
+//      code BOS-HOST → resolves with the code (this screen becomes the admin big screen)
+//      "I'm a player" → resolves null
+//  - noteButton(): the 📝 icon, only ever mounted on admin screens.
+// ============================================================
 import { verifyCode } from './quizstore.js';
-import { isLocalMode } from './net.js';
 
-export function controlUrl(room) {
-  const local = isLocalMode() && new URLSearchParams(location.search).has('local');
-  const qs = [room ? 'room=' + encodeURIComponent(room) : '', local ? 'local' : ''].filter(Boolean).join('&');
-  return new URL('control.html' + (qs ? '?' + qs : ''), location.href).toString();
+const KEY = 'hq-admin-code';
+export const savedAdminCode = () => { try { return sessionStorage.getItem(KEY) || ''; } catch (e) { return ''; } };
+export const rememberAdmin = (c) => { try { sessionStorage.setItem(KEY, c); } catch (e) { /* */ } };
+export const forgetAdmin = () => { try { sessionStorage.removeItem(KEY); } catch (e) { /* */ } };
+
+export const NOTE_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="M8 8h5M8 12h4M8 16h6"/><path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L14 12.8l-3.6.8.8-3.6z"/></svg>';
+
+export function adminGate() {
+  return new Promise((resolve) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'gate';
+    wrap.innerHTML = `
+      <form class="gate-card" autocomplete="off">
+        <img class="gate-img" src="assets/avatars/witch.webp" alt="">
+        <h1>Haunted Quiz</h1>
+        <p class="gate-q">Are you the game master?</p>
+        <input name="code" placeholder="Admin code" autocapitalize="characters" spellcheck="false" aria-label="Admin code">
+        <div class="gate-err"></div>
+        <button class="btn" type="submit">Enter as admin</button>
+        <div class="gate-or"><span>or</span></div>
+        <button class="btn ghost gate-skip" type="button">I'm a player — skip 👻</button>
+      </form>`;
+    document.body.appendChild(wrap);
+    const form = wrap.querySelector('form');
+    const input = form.querySelector('input');
+    const err = form.querySelector('.gate-err');
+    const submit = form.querySelector('button[type=submit]');
+    form.querySelector('.gate-skip').onclick = () => { wrap.remove(); resolve(null); };
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const code = input.value.trim().toUpperCase();
+      if (!code) { err.textContent = 'Type the admin code, or tap “skip”.'; return; }
+      submit.disabled = true; err.textContent = 'Checking…';
+      let ok = false;
+      try { ok = await verifyCode(code); } catch (x) { err.textContent = 'Could not check the code: ' + x.message; submit.disabled = false; return; }
+      submit.disabled = false;
+      if (!ok) { err.textContent = 'Wrong code 👻'; input.select(); return; }
+      rememberAdmin(code);
+      wrap.remove();
+      resolve(code);
+    };
+  });
 }
 
-export function mountGameMasterButton({ room, getRoom, newTab = false, beforeLeave } = {}) {
-  const btn = document.createElement('button');
-  btn.className = 'gm-btn';
-  btn.type = 'button';
-  btn.title = 'Game master';
-  btn.setAttribute('aria-label', 'Game master login');
-  btn.textContent = '⚠';
-  document.body.appendChild(btn);
-
-  const modal = document.createElement('div');
-  modal.className = 'gm-modal hidden';
-  modal.innerHTML = `
-    <form class="gm-card" autocomplete="off">
-      <div class="gm-icon">⚠</div>
-      <h3>Game master</h3>
-      <p>Enter the game-master code to control the game and edit the questions.</p>
-      <input name="code" placeholder="Code" autocapitalize="characters" spellcheck="false">
-      <div class="gm-err"></div>
-      <div class="gm-row">
-        <button type="button" class="btn ghost gm-cancel">Cancel</button>
-        <button type="submit" class="btn gm-ok">Unlock</button>
-      </div>
-    </form>`;
-  document.body.appendChild(modal);
-  const form = modal.querySelector('form');
-  const input = form.querySelector('input');
-  const err = form.querySelector('.gm-err');
-  const okBtn = form.querySelector('.gm-ok');
-
-  btn.onclick = () => { modal.classList.remove('hidden'); err.textContent = ''; input.value = ''; setTimeout(() => input.focus(), 50); };
-  form.querySelector('.gm-cancel').onclick = () => modal.classList.add('hidden');
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const code = input.value.trim().toUpperCase();
-    if (!code) return;
-    okBtn.disabled = true; err.textContent = 'Checking…';
-    let ok = false;
-    try { ok = await verifyCode(code); } catch (x) { err.textContent = 'Could not check the code: ' + x.message; okBtn.disabled = false; return; }
-    okBtn.disabled = false;
-    if (!ok) { err.textContent = 'Wrong code 👻'; input.select(); return; }
-    try { sessionStorage.setItem('hq-gm-code', code); localStorage.setItem('hq-gm-code', code); } catch (x) { /* */ }
-    const url = controlUrl(getRoom ? getRoom() : room);
-    modal.classList.add('hidden');
-    if (newTab) { window.open(url, '_blank'); return; }
-    if (beforeLeave) beforeLeave();
-    location.href = url;
-  };
-  return btn;
+/** 📝 admin-only button (top-right) */
+export function noteButton(onClick) {
+  const b = document.createElement('button');
+  b.className = 'note-btn';
+  b.type = 'button';
+  b.title = 'Edit questions';
+  b.setAttribute('aria-label', 'Edit questions');
+  b.innerHTML = NOTE_SVG;
+  b.onclick = onClick;
+  document.body.appendChild(b);
+  return b;
 }

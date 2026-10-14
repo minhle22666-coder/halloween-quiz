@@ -3,7 +3,8 @@
 // ============================================================
 import { ANSWER_STYLES } from './config.js';
 import { createControllerNet } from './net.js';
-import { loadLatestQuiz, saveQuiz, verifyCode, normalize } from './quizstore.js';
+import { verifyCode } from './quizstore.js';
+import { mountEditor } from './editor.js';
 import { SHAPES } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -174,82 +175,8 @@ $('c-exit').onclick = () => { if (confirm('Exit to the lobby? Scores reset.')) s
 $('c-reload').onclick = () => { send('reload'); toast('Big screen is loading the latest quiz…'); };
 
 // ---------------- question editor ----------------
-let draft = [];
-let dirty = false;
-function markDirty(v = true) { dirty = v; $('ed-status').textContent = v ? 'Unsaved changes' : 'All changes saved'; $('ed-status').classList.toggle('warn', v); }
-addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
-
-async function loadEditor() {
-  const info = await loadLatestQuiz();
-  draft = info.questions.map((q) => ({ ...q, wrong: [...q.wrong] }));
-  $('ed-info').innerHTML = info.version
-    ? `Editing <b>quiz v${info.version}</b> (latest save${info.savedAt ? ', ' + new Date(info.savedAt).toLocaleString() : ''}) · ${draft.length} questions`
-    : `Editing the <b>default quiz</b> · ${draft.length} questions` + (info.error ? ` <span class="bad">(database not ready: ${escapeHtml(info.error)})</span>` : '');
-  renderEditor();
-  markDirty(false);
-  $('ed-status').textContent = 'No changes';
+function loadEditor() {
+  mountEditor($('ed-root'), { getCode: () => code, toast, onSaved: () => { if (net) send('reload'); } });
 }
-const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-function renderEditor() {
-  const list = $('ed-list');
-  list.innerHTML = '';
-  draft.forEach((q, i) => {
-    const card = document.createElement('div');
-    card.className = 'card qedit';
-    card.innerHTML = `
-      <div class="qe-head"><b>Question ${i + 1}</b>
-        <span class="qe-tools"><button data-a="up" title="Move up">↑</button><button data-a="down" title="Move down">↓</button><button data-a="del" title="Delete">🗑</button></span></div>
-      <textarea rows="2" data-f="text" placeholder="Question…"></textarea>
-      <label class="ans ok"><span>✓</span><input data-f="correct" placeholder="Correct answer"></label>
-      ${[0, 1, 2].map((k) => `<label class="ans bad"><span>✗</span><input data-f="w${k}" placeholder="Wrong answer ${k + 1}"></label>`).join('')}`;
-    card.querySelector('[data-f=text]').value = q.text;
-    card.querySelector('[data-f=correct]').value = q.correct;
-    [0, 1, 2].forEach((k) => { card.querySelector(`[data-f=w${k}]`).value = q.wrong[k] || ''; });
-    card.addEventListener('input', (e) => {
-      const f = e.target.dataset.f;
-      if (!f) return;
-      if (f === 'text') q.text = e.target.value;
-      else if (f === 'correct') q.correct = e.target.value;
-      else q.wrong[+f.slice(1)] = e.target.value;
-      markDirty();
-    });
-    card.querySelector('.qe-tools').onclick = (e) => {
-      const a = e.target.dataset.a;
-      if (!a) return;
-      if (a === 'del') { if (!confirm(`Delete question ${i + 1}?`)) return; draft.splice(i, 1); }
-      if (a === 'up' && i > 0) [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]];
-      if (a === 'down' && i < draft.length - 1) [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]];
-      markDirty(); renderEditor();
-    };
-    list.appendChild(card);
-  });
-}
-$('ed-add').onclick = () => {
-  draft.push({ text: '', correct: '', wrong: ['', '', ''] });
-  markDirty(); renderEditor();
-  const cards = document.querySelectorAll('.qedit');
-  cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
-  cards[cards.length - 1].querySelector('textarea').focus();
-};
-$('ed-save').onclick = async () => {
-  const complete = normalize(draft);
-  const incomplete = draft.length - complete.length;
-  if (!complete.length) return toast('Fill in at least one question with all 4 answers');
-  if (incomplete && !confirm(`${incomplete} question(s) are incomplete and will be skipped. Save anyway?`)) return;
-  const btn = $('ed-save');
-  btn.disabled = true; $('ed-status').textContent = 'Saving…';
-  try {
-    const v = await saveQuiz(code, complete);
-    markDirty(false);
-    toast(`💾 Saved as quiz v${v}. The next game uses it.`, 3500);
-    if (net) send('reload');
-    await loadEditor();
-    $('ed-status').textContent = `Saved as v${v}`;
-  } catch (e) {
-    $('ed-status').textContent = 'Save failed';
-    toast('⚠ ' + e.message, 5000);
-  } finally { btn.disabled = false; }
-};
 
 boot();

@@ -137,104 +137,136 @@ body.bad .night-bg { filter: hue-rotate(-30deg) saturate(1.2); }
 @keyframes shieldOn { 0% { opacity: 0; transform: scaleY(.2); } 20% { opacity: 1; transform: scaleY(1.1); } 40% { transform: scaleY(1) scaleX(1.6); } 100% { opacity: 0; transform: scaleY(1); } }
 @keyframes sparkle { 0% { opacity: 0; transform: scale(.4); } 50% { opacity: 1; transform: scale(1.3) rotate(20deg); } 100% { opacity: 0; transform: scale(.8); } }
 
-/* ================= phone mini haunted-hallway scene ================= */
-.ms-slot { width: 100%; display: flex; justify-content: center; }
-.ministage {
-  position: relative; overflow: hidden; border-radius: 22px; width: 100%;
-  background: #07030c; border: 1px solid rgba(190, 150, 255, .25);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, .55), inset 0 0 60px rgba(0, 0, 0, .8);
-  isolation: isolate;
-}
-.ministage.big { aspect-ratio: 9 / 14; width: min(100%, 36dvh, 380px); }
-.ministage.mid { aspect-ratio: 4 / 3; max-width: 420px; }
-.ministage.small { aspect-ratio: 16 / 9; max-width: 420px; }
-.ministage > * { position: absolute; pointer-events: none; }
-.ms-bg { inset: -2%; background: url('../assets/img/hall-bg.webp') center / cover no-repeat; transform-origin: 50% 46%; }
-.ms-dark { inset: 0; background: #000; opacity: 0; transition: opacity .3s; }
-/* portrait eyes (painting on the right wall) */
-.ms-eyes { left: 91.4%; top: 30.2%; width: 6%; height: 2%; display: flex; justify-content: space-between; opacity: 0; }
+/* ================= phone: full-screen haunted-hallway scene ================= */
+.ministage { position: fixed; inset: 0; z-index: 1; overflow: hidden; background: #07030c; opacity: 0; visibility: hidden; transition: opacity .35s, visibility .35s; isolation: isolate; }
+.ministage.on { opacity: 1; visibility: visible; }
+.ministage > *, .ms-actors > * { position: absolute; pointer-events: none; }
+/* the background keeps its own aspect ratio (cover), so the painting/eyes stay aligned */
+.ms-world { left: 50%; top: 50%; translate: -50% -50%; width: max(100vw, calc(100dvh * 540 / 960)); aspect-ratio: 540 / 960; }
+.ms-cam { position: absolute; inset: 0; transform-origin: 50% 46%; }
+.ms-bg { position: absolute; inset: 0; background: url('../assets/img/hall-bg.webp') center / 100% 100% no-repeat; }
+.ms-eyes { position: absolute; left: 91.4%; top: 30.2%; width: 6%; height: 2%; display: flex; justify-content: space-between; opacity: 0; }
 .ms-eyes i { width: 34%; height: 100%; border-radius: 50%; background: #ff2a2a; box-shadow: 0 0 8px 3px rgba(255, 30, 30, .9); }
-.ms-redeyes { left: 40%; top: 40%; width: 20%; height: 3%; display: flex; justify-content: space-between; opacity: 0; z-index: 3; }
-.ms-redeyes i { width: 22%; height: 100%; border-radius: 50%; background: #ff2222; box-shadow: 0 0 14px 5px rgba(255, 20, 20, .8); }
-.ms-mascot { left: 50%; bottom: 9%; width: 34%; margin-left: -17%; z-index: 4; }
-.ms-mascot img { width: 100%; display: block; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, .6)); animation: msBob 2.4s ease-in-out infinite; transform-origin: 50% 80%; }
-.ms-mascot::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: -8%; height: 10%; border-radius: 50%; background: radial-gradient(rgba(0, 0, 0, .55), transparent 70%); }
-.ministage.small .ms-mascot, .ministage.mid .ms-mascot { width: 24%; margin-left: -12%; bottom: 8%; }
-.ms-ghost { width: 34%; left: -40%; top: 26%; opacity: 0; z-index: 5; filter: drop-shadow(0 0 12px rgba(150, 120, 255, .7)); }
-.ms-shield { left: 34%; top: 22%; width: 12%; height: 58%; border-radius: 50%; opacity: 0; z-index: 6; mix-blend-mode: screen;
-  background: radial-gradient(ellipse at center, rgba(220, 200, 255, .95), rgba(150, 100, 255, .45) 45%, transparent 72%);
-  box-shadow: 0 0 30px 6px rgba(160, 110, 255, .7); }
-.ms-vortex { right: 4%; top: 14%; width: 46%; aspect-ratio: 1; border-radius: 50%; opacity: 0; z-index: 4;
+.ms-shade { inset: 0; background: linear-gradient(rgba(7, 3, 12, .75), transparent 22%, transparent 62%, rgba(7, 3, 12, .9)); }
+.ms-dark { inset: 0; background: #000; opacity: 0; }
+.ms-tint { inset: 0; opacity: 0; transition: opacity .6s; }
+.ministage.tint-good .ms-tint { opacity: 1; background: radial-gradient(ellipse at 50% 60%, rgba(61, 220, 132, .28), transparent 65%); }
+.ministage.tint-bad .ms-tint { opacity: 1; background: radial-gradient(ellipse at 50% 60%, rgba(255, 40, 60, .32), transparent 65%); }
+.ministage.m-pre .ms-dark { opacity: .55; }
+
+/* actors live in a box whose size depends on the screen (keyframes are % of this box) */
+.ms-actors { left: 0; right: 0; top: var(--at, 12%); height: var(--ah, 70%); --mw: min(40vw, 24dvh); --gw: min(46vw, 28dvh); }
+.ministage.m-walk { --at: 10%; --ah: 74%; }
+.ministage.m-locked { --at: 24%; --ah: 50%; }
+.ministage.m-result { --at: 14%; --ah: 50%; }
+.ministage.m-pre .ms-actors { opacity: 0; }
+.ms-actors { top: var(--at); height: var(--ah); }
+.ministage.m-walk .ms-actors { top: 10%; height: 74%; }
+.ministage.m-locked .ms-actors { top: 24%; height: 50%; }
+.ministage.m-result .ms-actors { top: 14%; height: 50%; }
+
+.ms-mascot { left: calc(50% - var(--mw) / 2); bottom: 6%; width: var(--mw); z-index: 4; }
+.ms-mascot img { width: 100%; display: block; filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .7)); animation: msBob 2.4s ease-in-out infinite; transform-origin: 50% 80%; }
+.ms-mascot::after { content: ''; position: absolute; left: 18%; right: 18%; bottom: -10%; height: 12%; border-radius: 50%; background: radial-gradient(rgba(0, 0, 0, .6), transparent 70%); }
+.ms-glow { left: calc(50% - var(--mw)); bottom: -6%; width: calc(var(--mw) * 2); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(rgba(255, 180, 100, .22), transparent 60%); z-index: 1; }
+.ms-ghost { width: var(--gw); left: -50%; top: 18%; opacity: 0; z-index: 5; filter: drop-shadow(0 0 16px rgba(150, 120, 255, .8)); }
+.ms-redeyes { left: 36%; top: 30%; width: 28%; height: 3%; display: flex; justify-content: space-between; opacity: 0; z-index: 3; }
+.ms-redeyes i { width: 20%; height: 100%; border-radius: 50%; background: #ff2222; box-shadow: 0 0 16px 6px rgba(255, 20, 20, .8); }
+.ms-shield { left: 20%; top: 22%; width: 18%; height: 70%; border: 3px solid rgba(220, 200, 255, .9); border-radius: 50%; opacity: 0; z-index: 6; mix-blend-mode: screen;
+  background: radial-gradient(ellipse at center, rgba(230, 210, 255, 1), rgba(150, 100, 255, .5) 45%, transparent 72%); box-shadow: 0 0 40px 10px rgba(160, 110, 255, .7); }
+.ms-vortex { right: 2%; top: 4%; width: 56%; aspect-ratio: 1; border-radius: 50%; opacity: 0; z-index: 4;
   background: conic-gradient(from 0deg, transparent, rgba(140, 90, 255, .9), transparent 30%, rgba(80, 220, 200, .8), transparent 60%, rgba(140, 90, 255, .9), transparent);
   -webkit-mask: radial-gradient(circle, transparent 12%, #000 14%, #000 60%, transparent 70%); mask: radial-gradient(circle, transparent 12%, #000 14%, #000 60%, transparent 70%); }
-.ms-stars { left: 50%; bottom: 26%; font-size: 26px; opacity: 0; z-index: 7; transform: translateX(-50%); }
-.ms-spark { left: 50%; bottom: 30%; font-size: 40px; opacity: 0; z-index: 7; transform: translateX(-50%); }
-.ms-boo { left: 50%; top: 10%; transform: translateX(-50%); z-index: 8; opacity: 0; font-family: var(--title); font-size: 44px; color: #fff; background: var(--red); padding: 2px 16px; border-radius: 14px; letter-spacing: 2px; }
-.ms-bubble { left: 50%; bottom: 46%; transform: translateX(-50%); z-index: 9; white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis;
-  background: #fff; color: #23103e; font-weight: 700; font-size: 14px; padding: 6px 12px; border-radius: 14px; opacity: 0; box-shadow: 0 6px 16px rgba(0, 0, 0, .4); }
-.ms-bubble.show { animation: msBubble 2s ease both; }
-.ministage.mid .ms-bubble, .ministage.small .ms-bubble { bottom: 40%; }
-@keyframes msBubble { 0% { opacity: 0; transform: translate(-50%, 8px) scale(.6); } 12%, 82% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; } }
+.ms-stars { left: 50%; bottom: calc(6% + var(--mw) * .55); font-size: 34px; opacity: 0; z-index: 7; translate: -50% 0; }
+.ms-spark { left: 50%; bottom: calc(6% + var(--mw) * .7); font-size: 52px; opacity: 0; z-index: 7; translate: -50% 0; }
+.ms-boo { left: 50%; top: 0; translate: -50% 0; z-index: 8; opacity: 0; font-family: var(--title); font-size: 64px; color: #fff; background: var(--red); padding: 2px 22px; border-radius: 16px; letter-spacing: 3px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
+.ms-bubble { left: 50%; bottom: calc(10% + var(--mw)); translate: -50% 0; z-index: 9; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+  background: #fff; color: #23103e; font-weight: 700; font-size: 17px; padding: 8px 16px; border-radius: 16px; opacity: 0; box-shadow: 0 6px 16px rgba(0, 0, 0, .5); }
+.ms-bubble::after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -8px; border: 8px solid transparent; border-bottom: 0; border-top-color: #fff; }
+.ms-bubble.show { animation: msBubble 2.2s ease both; }
+@keyframes msBubble { 0% { opacity: 0; transform: translateY(8px) scale(.6); } 12%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 @keyframes msBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6%) rotate(2deg); } }
 
-/* --- walking forward --- */
-.ministage.walk .ms-bg { animation: msWalk 2.3s ease-in-out both; }
-@keyframes msWalk { from { transform: scale(1); } to { transform: scale(1.16); } }
-.ministage.walk .ms-mascot img { animation: msBob 0.9s ease-in-out infinite; }
-/* a single startle jump when something spooky happens (no endless shaking) */
+/* --- walking deeper into the hallway --- */
+.ministage.walk .ms-cam { animation: msWalk 2.3s ease-in-out both; }
+@keyframes msWalk { from { transform: scale(1); } to { transform: scale(1.18); } }
+.ministage.walk .ms-mascot img { animation: msStep .55s ease-in-out infinite; }
+@keyframes msStep { 0%, 100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-8%) rotate(5deg); } }
+.ministage.ev .ms-mascot img { animation: msStep .55s ease-in-out 4, msBob 2.4s ease-in-out 2.4s infinite; }
 .ministage.ev .ms-mascot { animation: msStartle .6s ease-out 2.35s both; }
 @keyframes msStartle { 0% { transform: none; } 30% { transform: translateY(-14%) scale(1.06, .94); } 60% { transform: translateY(0) scale(.96, 1.04); } 100% { transform: none; } }
-.ministage.ev-flicker .ms-bg { animation: msWalk 2.3s ease-in-out both, msFlicker 1.5s steps(1) 2.3s both; }
+.ministage.ev-flicker .ms-cam { animation: msWalk 2.3s ease-in-out both, msFlicker 1.5s steps(1) 2.3s both; }
 @keyframes msFlicker { 0% { filter: brightness(1); } 10% { filter: brightness(.15); } 18% { filter: brightness(1.4); } 28% { filter: brightness(.1); } 40% { filter: brightness(1.2); } 52% { filter: brightness(.2); } 64%, 100% { filter: brightness(1); } }
 .ministage.ev-painting .ms-eyes { animation: msEyes 2.2s ease 2.3s both; }
-@keyframes msEyes { 0% { opacity: 0; } 15% { opacity: 1; transform: translateX(0); } 60% { opacity: 1; transform: translateX(-30%); } 85% { opacity: 1; transform: translateX(-30%); } 100% { opacity: .0; } }
-.ministage.ev-painting .ms-bg { animation: msWalk 2.3s ease-in-out both, msLookRight 1.6s ease-in-out 2.3s both; }
-@keyframes msLookRight { 0% { transform: scale(1.16); } 40%, 70% { transform: scale(1.3) translate(-8%, 4%); } 100% { transform: scale(1.16); } }
-.ministage.ev-door .ms-bg, .ministage.ev-clock .ms-bg { animation: msWalk 2.3s ease-in-out both, msShake .14s linear 2.3s 7; }
+@keyframes msEyes { 0% { opacity: 0; } 15% { opacity: 1; transform: translateX(0); } 60%, 85% { opacity: 1; transform: translateX(-30%); } 100% { opacity: 0; } }
+.ministage.ev-painting .ms-cam { animation: msWalk 2.3s ease-in-out both, msLookRight 1.6s ease-in-out 2.3s both; }
+@keyframes msLookRight { 0% { transform: scale(1.18); } 40%, 70% { transform: scale(1.32) translate(-8%, 4%); } 100% { transform: scale(1.18); } }
+.ministage.ev-door .ms-cam, .ministage.ev-clock .ms-cam { animation: msWalk 2.3s ease-in-out both, msShake .14s linear 2.3s 7; }
 @keyframes msShake { 0%, 100% { translate: 0 0; } 25% { translate: -1.5% .5%; } 75% { translate: 1.5% -.5%; } }
 .ministage.ev-blackout .ms-dark { animation: msBlack 2.6s ease 2.3s both; }
 .ministage.ev-blackout .ms-redeyes { animation: msRed 2.6s ease 2.3s both; }
 @keyframes msBlack { 0% { opacity: 0; } 8%, 80% { opacity: .93; } 100% { opacity: 0; } }
 @keyframes msRed { 0%, 15% { opacity: 0; } 25%, 45% { opacity: 1; } 48% { opacity: 0; } 52%, 75% { opacity: 1; } 85%, 100% { opacity: 0; } }
 
-/* --- CORRECT: a mysterious shield stops the ghost --- */
+/* --- my answer was RIGHT: a mysterious force stops the ghost --- */
 .ministage.res-shield .ms-ghost { animation: ghShield 2.4s ease-in-out both; }
-@keyframes ghShield { 0% { left: -40%; opacity: 0; } 15% { opacity: 1; } 32% { left: 8%; transform: scale(1.1); } 38% { left: 6%; transform: scale(.7, 1.15); } 70% { left: -10%; top: 6%; transform: rotate(-260deg) scale(.7); opacity: 1; } 100% { left: -50%; top: -10%; transform: rotate(-540deg) scale(.3); opacity: 0; } }
+@keyframes ghShield { 0% { left: -50%; opacity: 0; } 15% { opacity: 1; } 32% { left: -2%; transform: scale(1.1); } 38% { left: -4%; transform: scale(.7, 1.15); } 70% { left: -18%; top: -4%; transform: rotate(-260deg) scale(.7); opacity: 1; } 100% { left: -60%; top: -20%; transform: rotate(-540deg) scale(.3); opacity: 0; } }
 .ministage.res-shield .ms-shield { animation: shieldPop 1.8s ease-out .55s both; }
 @keyframes shieldPop { 0% { opacity: 0; transform: scaleY(.2); } 15% { opacity: 1; transform: scaleY(1.1) scaleX(1.6); } 30% { transform: scale(1); } 100% { opacity: 0; } }
-/* --- CORRECT: a vortex sucks the ghost away --- */
 .ministage.res-vortex .ms-vortex { animation: vxOpen 2.4s ease both, vxSpin .8s linear infinite; }
 @keyframes vxOpen { 0% { opacity: 0; transform: scale(.2); } 25%, 75% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.1); } }
 @keyframes vxSpin { to { rotate: 360deg; } }
 .ministage.res-vortex .ms-ghost { animation: ghVortex 2.2s ease-in both; }
-@keyframes ghVortex { 0% { left: 110%; top: 40%; opacity: 0; } 15% { opacity: 1; } 35% { left: 54%; top: 34%; transform: none; } 50% { left: 58%; top: 30%; transform: rotate(20deg); } 100% { left: 62%; top: 18%; transform: rotate(900deg) scale(0); opacity: .2; } }
+@keyframes ghVortex { 0% { left: 110%; top: 40%; opacity: 0; } 15% { opacity: 1; } 35% { left: 50%; top: 28%; transform: none; } 50% { left: 54%; top: 24%; transform: rotate(20deg); } 100% { left: 60%; top: 14%; transform: rotate(900deg) scale(0); opacity: .2; } }
 .ministage.res-shield .ms-mascot img, .ministage.res-vortex .ms-mascot img { animation: msHappy .4s ease-in-out 1.3s 4 alternate both; }
 @keyframes msHappy { from { transform: translateY(0) scale(1); } to { transform: translateY(-16%) scale(1.06, .95); } }
 .ministage.res-shield .ms-spark, .ministage.res-vortex .ms-spark { animation: sparkUp 1.2s ease-out 1.4s 2 both; }
-@keyframes sparkUp { 0% { opacity: 0; transform: translate(-50%, 0) scale(.4); } 50% { opacity: 1; transform: translate(-50%, -40%) scale(1.3) rotate(20deg); } 100% { opacity: 0; transform: translate(-50%, -70%) scale(.8); } }
-/* --- WRONG: the ghost takes revenge --- */
+@keyframes sparkUp { 0% { opacity: 0; transform: scale(.4); } 50% { opacity: 1; transform: translateY(-40%) scale(1.3) rotate(20deg); } 100% { opacity: 0; transform: translateY(-70%) scale(.8); } }
+/* --- my answer was WRONG: the ghost scares me --- */
 .ministage.res-scare .ms-dark { animation: darkHalf 3.2s ease both; }
-@keyframes darkHalf { 0% { opacity: 0; } 10%, 75% { opacity: .55; } 100% { opacity: .2; } }
+@keyframes darkHalf { 0% { opacity: 0; } 10%, 75% { opacity: .5; } 100% { opacity: .2; } }
 .ministage.res-scare .ms-ghost { animation: ghBoo 3.2s ease-out both; }
-@keyframes ghBoo { 0% { left: 105%; top: 40%; opacity: 0; transform: scale(.6); } 15% { opacity: 1; } 22% { left: 30%; top: 22%; transform: scale(1.9); } 30% { transform: scale(2.1); } 70% { left: 30%; top: 22%; transform: scale(1.9) rotate(4deg); opacity: 1; } 100% { left: 110%; top: 0%; transform: scale(.8); opacity: 0; } }
+@keyframes ghBoo { 0% { left: 105%; top: 34%; opacity: 0; transform: scale(.6); } 15% { opacity: 1; } 22% { left: 2%; top: -2%; transform: scale(1.4); } 30% { transform: scale(1.55); } 70% { left: 2%; top: -2%; transform: scale(1.4) rotate(-4deg); opacity: 1; } 100% { left: 110%; top: -10%; transform: scale(.8); opacity: 0; } }
 .ministage.res-scare .ms-boo { animation: booPop 1.5s ease .55s both; }
-@keyframes booPop { 0% { opacity: 0; transform: translateX(-50%) scale(.3); } 20%, 75% { opacity: 1; transform: translateX(-50%) scale(1.1); } 100% { opacity: 0; transform: translateX(-50%) scale(1); } }
+@keyframes booPop { 0% { opacity: 0; transform: scale(.3); } 20%, 75% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0; transform: scale(1); } }
 .ministage.res-scare .ms-mascot { animation: msFaint 1.2s ease-in .65s both; }
-@keyframes msFaint { 0% { transform: none; } 25% { transform: translateY(-30%) rotate(-200deg); } 55% { transform: translateY(-20%) rotate(-560deg); } 100% { transform: translateY(18%) rotate(-630deg); } }
+@keyframes msFaint { 0% { transform: none; } 25% { transform: translateY(-30%) rotate(-200deg); } 55% { transform: translateY(-20%) rotate(-560deg); } 100% { transform: translateY(10%) rotate(-630deg); } }
 .ministage.res-scare .ms-mascot img { animation: none; }
 .ministage.res-scare .ms-stars { animation: starsSpin 1s linear 1.8s 3 both; }
-@keyframes starsSpin { 0% { opacity: 1; transform: translateX(-50%) rotate(0); } 100% { opacity: 1; transform: translateX(-50%) rotate(360deg); } }
+@keyframes starsSpin { 0% { opacity: 1; transform: rotate(0); } 100% { opacity: 1; transform: rotate(360deg); } }
 
-/* layout bits around the stage */
-.preopts { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.preopt { --c: #e5482f; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; font-weight: 700; color: #fff; background: color-mix(in srgb, var(--c) 75%, #000); text-align: left; font-size: 15px; }
-.preopt .shape { font-size: 16px; }
-.view.locked { gap: 12px; }
-.view.locked .qline { width: 100%; }
-.mypick { --c: #e5482f; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 14px; background: var(--c); color: #fff; font-weight: 700; font-size: 18px; box-shadow: 0 5px 0 rgba(0, 0, 0, .3); }
-.mypick .shape { font-size: 20px; }
-.correct-ans { font-size: 15px; color: #e8dcff; background: rgba(0, 0, 0, .35); padding: 8px 14px; border-radius: 12px; max-width: 100%; }
-.correct-ans b { color: #fff; }
-.view.result { gap: 10px; }
-.view.result .verdict { font-size: 44px; }
-.topbar { padding-right: 52px; }
+/* ================= views that sit on top of the scene ================= */
+.view { z-index: 2; }
+.view.over { justify-content: space-between; align-items: center; text-align: center; }
+.view.over .bottom { width: 100%; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.walk-cap { color: #f0e6ff; font-size: 18px; font-weight: 600; text-shadow: 0 2px 8px #000; margin: 0; }
+.qbadge.lg { font-size: 18px; padding: 8px 18px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
+/* question card (pre / locked) */
+.qcard { width: 100%; background: rgba(255, 255, 255, .96); color: #1d0f38; border-radius: 20px; padding: 18px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5); text-align: center; }
+.qcard .qn { display: inline-block; background: var(--orange); color: #2a1200; font-weight: 700; border-radius: 99px; padding: 3px 12px; font-size: 14px; margin-bottom: 8px; }
+.qcard .qt { font-size: clamp(22px, 6.6vw, 30px); font-weight: 700; line-height: 1.2; }
+.view.pre { justify-content: center; gap: 16px; }
+.preopts { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.preopt { --c: #e5482f; display: flex; align-items: center; gap: 10px; padding: 16px 14px; min-height: 76px; border-radius: 16px; font-weight: 700; color: #fff; background: var(--c); box-shadow: 0 5px 0 rgba(0, 0, 0, .35); text-align: left; font-size: clamp(17px, 4.8vw, 21px); line-height: 1.15; }
+.preopt .shape { font-size: 22px; }
+.mypick { --c: #e5482f; display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 16px; background: var(--c); color: #fff; font-weight: 700; font-size: 20px; box-shadow: 0 6px 0 rgba(0, 0, 0, .35); max-width: 100%; }
+.mypick .shape { font-size: 24px; }
+.hint-line { color: #e8dcff; text-shadow: 0 2px 8px #000; margin: 0; font-size: 15px; }
+/* result */
+.view.result { gap: 10px; padding-top: calc(env(safe-area-inset-top) + 70px); }
+.view.result .verdict { font-size: clamp(46px, 14vw, 64px); text-shadow: 0 4px 0 rgba(0, 0, 0, .5), 0 0 26px currentColor; }
+.res-panel { width: 100%; background: rgba(15, 6, 30, .82); border: 1px solid var(--line); border-radius: 20px; padding: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; backdrop-filter: blur(8px); }
+.res-panel .gain { grid-column: 1; font-size: 28px; background: none; padding: 0; align-self: center; }
+.res-panel .rankbox { grid-column: 2; background: rgba(255, 255, 255, .06); border: 0; padding: 8px; }
+.res-panel .rankbox b { font-size: 38px; }
+.res-panel .rankbox span:last-child { font-size: 13px; }
+.res-panel .streak { grid-column: 1 / -1; min-height: 0; }
+.res-panel .streak:empty { display: none; }
+.correct-ans { grid-column: 1 / -1; font-size: 17px; color: #e8dcff; background: rgba(255, 255, 255, .06); padding: 10px 14px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.correct-ans b { color: #fff; font-size: 19px; }
+.correct-ans .shape { font-size: 18px; }
+/* answering */
+.view.answer .qline { font-size: clamp(18px, 5vw, 22px); padding: 14px; }
+.abtn { font-size: clamp(19px, 5.4vw, 24px); }
+.abtn .shape { font-size: 44px; }
+.topbar { padding-right: 14px; }

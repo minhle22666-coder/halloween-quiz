@@ -82,10 +82,18 @@ Link dùng:
    - Điện thoại có cảnh hành lang mini riêng: mascot đi, sự kiện ma ám, ma bị chặn / ma hù y như màn chiếu.
 6. Sau câu cuối → **podium Top 3** + tổng điểm, bảng hạng 4–12. Mỗi điện thoại hiện hạng của chính mình.
 
-**Quản trò (mã `BOS-HOST`):** bấm biểu tượng **⚠** nhỏ ở góc trên bên phải (có trên màn chiếu lẫn điện thoại) → nhập `BOS-HOST` → mở trang **Game Master** (`control.html`):
-- Tab **🎮 Live control**: thấy câu hỏi đang chạy + 4 đáp án (đáp án đúng có ✓), số người đã trả lời từng đáp án, thời gian còn lại, bảng xếp hạng. Nút **Start / Skip / Next question / End question / Restart / Exit to lobby**, kick người chơi. Điện thoại của quản trò thành cái remote — không cần đứng ở máy chiếu.
-- Tab **✏️ Questions**: sửa trực tiếp câu hỏi, ô xanh = đáp án đúng, 3 ô đỏ = đáp án sai; thêm/xoá/đổi thứ tự câu → **💾 Save**. Mỗi lần Save tạo 1 phiên bản mới (v1, v2…); game luôn lấy **bản Save gần nhất** khi bấm Start, và **đáp án đúng được xáo vào ô ngẫu nhiên** mỗi ván.
-- Màn chiếu hiện dòng "Quiz vN · X questions" dưới mã PIN để biết đang dùng bản nào.
+**Vào trang chủ** → hiện ô **"Are you the game master?"**:
+- Nhập `BOS-HOST` → **Enter as admin** → máy này thành **màn hình quản trò** (màn chiếu 3D: QR, sảnh, câu hỏi, đáp án, animation, nút Next question / Skip / Restart / Exit). Đăng nhập được nhớ trong tab đó (refresh không phải nhập lại).
+- Bấm **I'm a player — skip** → chuyển sang màn người chơi (nhập PIN, tên, avatar).
+- Người chơi quét QR thì vào thẳng màn người chơi, không bị hỏi mã.
+
+**📝 Edit questions** (nút góc trên phải, **chỉ admin thấy**): sửa câu hỏi ngay trên màn quản trò — ô xanh = đáp án đúng, 3 ô đỏ = đáp án sai, thêm/xoá/đổi thứ tự → **💾 Save**. Mỗi lần Save là 1 phiên bản mới (v1, v2…); game luôn dùng **bản Save gần nhất**, đáp án đúng được **xáo vào ô ngẫu nhiên** mỗi ván. Nút "Log out" trong khung edit để thoát quyền admin.
+(Tuỳ chọn: `control.html` là remote trên điện thoại cho quản trò — cũng đăng nhập bằng BOS-HOST.)
+
+**Animation khi chốt đáp án:**
+- **Màn quản trò** theo cả phòng: **≥ 50% người chơi trả lời đúng** → con ma lao ra nhưng bị thế lực bí ẩn chặn lại, banner "**XX% of players got it right!**"; ngược lại → con ma hù dọa, banner "**XX% of players got BOO'd!**" (XX = % người sai/không trả lời).
+- **Điện thoại** theo **chính người đó**: mình đúng → ma bị chặn (khiên phép / vòng xoáy); mình sai/hết giờ → ma hù, mình xoay vòng ngã choáng. Cảnh hành lang chiếm **toàn màn hình**.
+- **Mascot = avatar**: trên điện thoại, nhân vật đi trong hành lang chính là avatar người chơi đã chọn; trên màn quản trò là avatar của **người đang dẫn đầu** (câu 1 chưa ai có điểm thì là phù thuỷ).
 
 **Nút điều khiển (góc dưới trái, khi đang chơi):**
 - **⟲ Restart** — chơi lại từ đầu (intro + câu 1) với cùng người chơi, điểm về 0.

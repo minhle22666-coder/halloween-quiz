@@ -4,7 +4,8 @@
 import { CONFIG, ANSWER_STYLES, AVATARS } from './config.js';
 import { createHostNet, createHostCtlOut, isLocalMode } from './net.js';
 import { loadLatestQuiz, toGame, verifyCode } from './quizstore.js';
-import { mountGameMasterButton } from './gm.js';
+import { adminGate, savedAdminCode, noteButton, forgetAdmin } from './gm.js';
+import { mountEditor } from './editor.js';
 import { SHAPES, el, avatarEl, countUp, confetti } from './ui.js';
 import * as sfx from './sfx.js';
 
@@ -252,12 +253,14 @@ async function startGame(skipConfirm = false) {
   scheduleHeartbeat(100);
   sfx.ambientStop();
   const t = document.querySelector('.intro-title'); t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
-  await stage.playIntro({
+  const introDone = stage.playIntro({
     onThunder: (k) => sfx.thunder(k),
     onLaugh: () => sfx.laugh(6),
     onDoor: () => sfx.doorCreak(),
     onFlicker: () => sfx.buzz(),
   });
+  await Promise.race([introDone, new Promise((r) => setTimeout(r, 24000))]);
+  if (S.phase === 'intro' && S.run === run) stage.skipIntro();
   if (S.phase === 'intro' && S.run === run) nextQuestion();
 }
 
@@ -279,8 +282,17 @@ async function nextQuestion() {
   sfx.ambientStart();
   send({ t: 'walk', i: S.qi, total: QUIZ.length });
   scheduleHeartbeat(500);
-  await stage.walkTo(S.qi, FX);
+  updateMascot();
+  // safety net: never wait more than 7 s (e.g. if the tab is in the background and animations pause)
+  await Promise.race([stage.walkTo(S.qi, FX), new Promise((r) => setTimeout(r, 7000))]);
   if (S.phase === 'walk' && S.qi === my && S.run === run) showPre();
+}
+
+// the big-screen mascot wears the avatar of the current leader
+function updateMascot() {
+  const leader = ranked()[0];
+  const id = leader && leader.score > 0 ? leader.avatar : null;
+  stage.setMascotSprite(id ? AVATARS.find((a) => a.id === id).src : null);
 }
 
 // 2) the question card appears
@@ -386,11 +398,16 @@ function closeQuestion() {
     t.classList.add(i === q.answer ? 'right' : 'wrong');
     t.querySelector('.cnt b').textContent = counts[i] || 0;
   });
-  const answeredN = S.answers.size;
-  const good = nCorrect > 0 && nCorrect >= answeredN / 2;
+  const nPlayers = S.players.size;
+  const pct = nPlayers ? Math.round((nCorrect / nPlayers) * 100) : 0;
+  const good = nPlayers > 0 && nCorrect / nPlayers >= 0.5;   // ≥50% of players right → the ghost is stopped
   const banner = $('result-banner');
-  banner.textContent = answeredN ? `${nCorrect} / ${S.players.size} got it right!` : 'Nobody answered… spooky!';
-  banner.style.color = good ? 'var(--green)' : 'var(--red)';
+  banner.innerHTML = good
+    ? `<b>${pct}%</b> of players got it right!`
+    : `<b>${100 - pct}%</b> of players got BOO'd! 👻`;
+  banner.classList.toggle('good', good);
+  banner.classList.toggle('bad', !good);
+  banner.style.color = '';
   send({ t: 'reveal', q: S.qi, correct: q.answer, res: resultsPayload(), total: QUIZ.length });
   scheduleHeartbeat(3000);
   save();
@@ -627,7 +644,13 @@ async function boot() {
   net = createHostNet(room, { onPlayerMsg, onStatus: (s) => { if (s !== 'SUBSCRIBED') console.warn('realtime', s); } });
   ctlOut = createHostCtlOut(room);
   setInterval(pushCtl, 1000);
-  mountGameMasterButton({ room, newTab: true });
+  noteButton(toggleEditor);
+  mountEditor($('editor-body'), { getCode: () => adminCode, toast: hostToast, onSaved: () => {
+    if (S.phase === 'lobby') { refreshQuiz(); hostToast('Saved — the big screen now uses the new questions'); }
+    else hostToast('Saved — the new questions start with the next game');
+  } });
+  $('editor-close').onclick = toggleEditor;
+  $('editor-logout').onclick = () => { forgetAdmin(); location.href = 'index.html'; };
   show('scr-lobby');
   // latest saved quiz (Supabase) — correct answers are shuffled to random tiles
   quizInfo = await loadLatestQuiz();
@@ -669,12 +692,30 @@ async function boot() {
 function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
 function toggleMute() { const m = sfx.toggleMute(); $('btn-mute').textContent = m ? '🔇' : '🔊'; }
 
-// phones landing on the big-screen page are almost always players
-const isPhone = matchMedia('(pointer: coarse)').matches && Math.min(innerWidth, innerHeight) < 600;
-if (isPhone && !params.has('host')) {
-  $('phone-gate').classList.remove('hidden');
-  $('pg-host').onclick = () => { $('phone-gate').remove(); startBoot(); };
-} else startBoot();
+function toggleEditor() {
+  const d = $('editor');
+  d.classList.toggle('open');
+  document.body.classList.toggle('editing', d.classList.contains('open'));
+}
+let toastT = 0;
+function hostToast(msg) {
+  let t = document.querySelector('.toast');
+  if (!t) { t = el('div', 'toast'); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.add('hidden'), 3500);
+}
+
+// ---- entry: admin code → admin big screen, otherwise → player screen
+let adminCode = savedAdminCode();
+(async () => {
+  if (!adminCode) adminCode = await adminGate();
+  if (!adminCode) {
+    location.replace('play.html' + (params.has('local') ? '?local' : ''));
+    return;
+  }
+  document.body.classList.add('is-admin');
+  startBoot();
+})();
 
 function startBoot() { boot().catch((e) => {
   console.error(e);

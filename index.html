@@ -97,16 +97,15 @@
     <button id="btn-exit" class="pill hidden" title="Exit to the lobby">✕ Exit</button>
   </div>
 
-  <!-- phone visitors: they are probably players -->
-  <div id="phone-gate" class="hidden">
-    <div class="pg-card">
-      <img src="assets/avatars/witch.webp" alt="">
-      <h2>Haunted Quiz</h2>
-      <p>On your phone? Join the game as a player.</p>
-      <a class="btn" href="play.html">Join the game 👻</a>
-      <button class="btn ghost" id="pg-host">I'm the host — show the big screen</button>
+  <!-- admin-only question editor (📝) -->
+  <aside id="editor" class="editor">
+    <div class="editor-top">
+      <b>📝 Edit questions</b>
+      <button class="link" id="editor-logout" title="Log out admin">Log out</button>
+      <button class="x" id="editor-close" title="Close">✕</button>
     </div>
-  </div>
+    <div id="editor-body"></div>
+  </aside>
 
   <script type="module" src="js/host.js"></script>
 </body>

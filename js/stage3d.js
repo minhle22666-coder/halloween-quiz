@@ -337,6 +337,7 @@ export class Stage {
 
   _buildMascot() {
     // Placeholder mascot: a floating 2D sprite (swap for a 3D model later — see MASCOT in config.js)
+    this._mascotUrl = MASCOT.sprite;
     const tex = new THREE.TextureLoader().load(MASCOT.sprite);
     tex.colorSpace = THREE.SRGBColorSpace;
     const root = new THREE.Group();
@@ -356,6 +357,19 @@ export class Stage {
       pos: this.entrance.clone(), // hallway-local
       shiver: 0, spin: 0, tilt: 0, squash: 0, hop: 0, red: 0, fallen: 0, busy: false,
     };
+  }
+
+  /** swap the floating 2D mascot image (null = default) */
+  setMascotSprite(url) {
+    url = url || MASCOT.sprite;
+    if (this._mascotUrl === url) return;
+    this._mascotUrl = url;
+    new THREE.TextureLoader().load(url, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const m = this.mascot.sprite.material;
+      if (m.map && m.map !== tex) m.map.dispose();
+      m.map = tex; m.needsUpdate = true;
+    });
   }
 
   _buildGhost(gltf) {

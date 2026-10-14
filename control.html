@@ -14,7 +14,7 @@
   <!-- LOGIN -->
   <main id="login" class="login hidden">
     <form class="gm-card" id="login-form" autocomplete="off">
-      <div class="gm-icon">⚠</div>
+      <div class="gm-icon">📝</div>
       <h3>Game master</h3>
       <p>Enter the game-master code.</p>
       <input id="login-code" placeholder="Code" autocapitalize="characters" spellcheck="false">
@@ -27,7 +27,7 @@
   <!-- APP -->
   <div id="app" class="hidden">
     <header class="gmtop">
-      <div class="brand">⚠ <b>Game Master</b></div>
+      <div class="brand">📝 <b>Game Master</b></div>
       <label class="pin">PIN <input id="pin" inputmode="numeric" maxlength="6" placeholder="------"></label>
       <span class="dot" id="dot" title="connection"></span>
       <button class="link" id="logout" title="Lock">🔒</button>
@@ -73,16 +73,7 @@
 
     <!-- EDIT -->
     <section id="tab-edit" class="tabpane hidden">
-      <div class="card info">
-        <div id="ed-info">Loading the latest quiz…</div>
-        <div class="muted small">Type the <b class="ok">correct answer</b> in the green box and 3 <b class="bad">wrong answers</b> below it. The answers are shuffled every game, so the correct one lands on a random tile.</div>
-      </div>
-      <div id="ed-list"></div>
-      <button class="btn ghost add" id="ed-add">＋ Add question</button>
-      <div class="savebar">
-        <span id="ed-status" class="muted">No changes</span>
-        <button class="btn" id="ed-save">💾 Save</button>
-      </div>
+      <div id="ed-root"></div>
     </section>
   </div>
   <div class="toast hidden" id="toast"></div>
