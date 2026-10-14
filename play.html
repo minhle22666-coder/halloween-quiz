@@ -43,19 +43,35 @@
     <p class="muted">Look at the big screen!</p>
   </main>
 
+  <!-- the phone's own little haunted-hallway scene (moved between views) -->
+  <div class="ministage idle" id="ms">
+    <div class="ms-bg"></div>
+    <div class="ms-eyes"><i></i><i></i></div>
+    <div class="ms-dark"></div>
+    <div class="ms-redeyes"><i></i><i></i></div>
+    <div class="ms-vortex"></div>
+    <img class="ms-ghost" src="assets/img/ghost.webp" alt="">
+    <div class="ms-shield"></div>
+    <div class="ms-mascot"><img id="ms-mascot-img" alt=""></div>
+    <div class="ms-stars">💫</div>
+    <div class="ms-spark">✨</div>
+    <div class="ms-boo">BOO!!</div>
+    <div class="ms-bubble" id="ms-bubble"></div>
+  </div>
+
   <!-- MASCOT WALKING (between questions) -->
   <main id="v-walk" class="view hidden center">
     <div class="qbadge" id="walk-num">Question 1 of 5</div>
-    <div class="walker">🧙‍♀️<span>💨</span></div>
-    <h2>Going deeper into the haunted hallway…</h2>
-    <p class="muted">Get ready — look at the big screen!</p>
+    <div class="ms-slot" data-size="big"></div>
+    <p class="muted">The mascot sneaks deeper into the haunted hallway…</p>
   </main>
 
   <!-- QUESTION PREVIEW -->
   <main id="v-pre" class="view hidden center">
     <div class="qbadge" id="pre-num">Question 1 of 5</div>
     <h2 class="qtext" id="pre-text"></h2>
-    <div class="ready">Get ready…</div>
+    <div class="preopts" id="pre-opts"></div>
+    <div class="ready">Answers open in a moment…</div>
     <div class="prebar"><i id="pre-bar"></i></div>
   </main>
 
@@ -67,20 +83,21 @@
   </main>
 
   <!-- LOCKED -->
-  <main id="v-locked" class="view hidden center">
-    <div class="picked" id="picked"></div>
-    <h2>Answer locked in!</h2>
+  <main id="v-locked" class="view hidden center locked">
+    <div class="qline"><span class="qbadge sm" id="lk-num">1/5</span><span class="qtext-sm" id="lk-text"></span></div>
+    <div class="ms-slot" data-size="small"></div>
+    <div class="mypick" id="picked"></div>
     <p class="muted" id="locked-time"></p>
-    <div class="floaty-ghost">👻</div>
     <p class="muted">Waiting for the others…</p>
   </main>
 
   <!-- RESULT -->
   <main id="v-result" class="view hidden center result">
-    <div class="skit" id="skit"></div>
+    <div class="ms-slot" data-size="mid"></div>
     <h2 class="verdict" id="verdict"></h2>
     <div class="gain" id="gain"></div>
     <div class="streak" id="streak"></div>
+    <div class="correct-ans" id="correct-ans"></div>
     <div class="rankbox"><span>You're in</span><b id="rank">—</b><span id="behind"></span></div>
   </main>
 

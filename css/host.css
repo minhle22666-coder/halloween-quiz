@@ -219,3 +219,5 @@ body { background: radial-gradient(ellipse at 60% 40%, #3a1a5e, #12081f 70%); }
 .pg-card h2 { font-family: var(--title); font-weight: 400; font-size: 52px; color: var(--orange); margin: 0; letter-spacing: 2px; }
 .pg-card p { color: var(--muted); margin: 0 0 6px; }
 .pg-card .btn { text-decoration: none; text-align: center; }
+
+.quiz-info { font-size: 13px; color: var(--muted); background: rgba(255,255,255,.06); padding: 4px 12px; border-radius: 99px; }

@@ -1,8 +1,10 @@
 // ============================================================
 //  HOST — game state machine (authoritative)
 // ============================================================
-import { CONFIG, QUESTIONS, ANSWER_STYLES, AVATARS } from './config.js';
-import { createHostNet, isLocalMode } from './net.js';
+import { CONFIG, ANSWER_STYLES, AVATARS } from './config.js';
+import { createHostNet, createHostCtlOut, isLocalMode } from './net.js';
+import { loadLatestQuiz, toGame, verifyCode } from './quizstore.js';
+import { mountGameMasterButton } from './gm.js';
 import { SHAPES, el, avatarEl, countUp, confetti } from './ui.js';
 import * as sfx from './sfx.js';
 
@@ -32,6 +34,10 @@ const S = {
 };
 
 let stage = null;
+let QUIZ = [];                                  // current game: shuffled questions {text, options, answer}
+let quizInfo = { questions: [], version: 0, source: 'default' };
+let ctlOut = null;                              // host -> game-master screens
+const ctlCodes = new Map();                     // code -> verified (bool)
 let net = null;
 let timerRAF = 0;
 
@@ -39,7 +45,7 @@ let timerRAF = 0;
 function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
-      phase: S.phase, qi: S.qi, players: [...S.players.values()].filter((p) => !p.bot), kicked: [...S.kicked], t: Date.now(),
+      phase: S.phase, qi: S.qi, quiz: QUIZ, players: [...S.players.values()].filter((p) => !p.bot), kicked: [...S.kicked], t: Date.now(),
     }));
   } catch (e) { /* ignore */ }
 }
@@ -50,6 +56,7 @@ function restore() {
     d.players.forEach((p) => S.players.set(p.id, p));
     d.kicked.forEach((k) => S.kicked.add(k));
     S.qi = d.qi;
+    if (Array.isArray(d.quiz) && d.quiz.length) QUIZ = d.quiz;
     if (d.phase === 'lobby') return true;
     S.phase = d.phase === 'final' ? 'final' : 'board';
     return true;
@@ -64,6 +71,7 @@ function onPlayerMsg(m) {
   if (m.t === 'join') handleJoin(m);
   else if (m.t === 'ans') handleAnswer(m);
   else if (m.t === 'leave') removePlayer(m.id, false);
+  else if (m.t === 'ctl') handleCtl(m);
 }
 
 function handleJoin(m) {
@@ -91,7 +99,7 @@ function handleAnswer(m) {
   if (hostElapsed > dur + 2500) return;
   const ms = Math.max(0, Math.min(dur, Number(m.ms) || hostElapsed));
   const c = Number(m.c);
-  const ok = c === QUESTIONS[S.qi].answer;
+  const ok = c === QUIZ[S.qi].answer;
   const pts = ok ? Math.round(CONFIG.MAX_POINTS * (1 - (ms / dur) / 2)) : 0;
   S.answers.set(m.id, { c, ms, ok, pts });
   updateAnswered();
@@ -102,20 +110,21 @@ function handleAnswer(m) {
 let hbTimer = 0;
 function heartbeat() {
   clearTimeout(hbTimer);
-  const msg = { t: 'hb', ph: S.phase, n: S.players.size, q: S.qi, total: QUESTIONS.length, ids: [...S.players.keys()].filter((id) => !id.startsWith('bot')).join(',') };
+  const msg = { t: 'hb', ph: S.phase, n: S.players.size, q: S.qi, total: QUIZ.length, ids: [...S.players.keys()].filter((id) => !id.startsWith('bot')).join(',') };
   if (S.kicked.size) msg.k = [...S.kicked].join(',');
   if (S.phase === 'open' || S.phase === 'pre') {
     msg.qd = qPayload();
     if (S.phase === 'open') msg.rem = Math.max(0, CONFIG.QUESTION_TIME * 1000 - (performance.now() - S.openedAt));
   }
   if (S.phase === 'reveal' || S.phase === 'board' || S.phase === 'final') msg.res = resultsPayload();
+  if ((S.phase === 'reveal' || S.phase === 'board') && QUIZ[S.qi]) { msg.qd = qPayload(); msg.cor = QUIZ[S.qi].answer; }
   send(msg);
   hbTimer = setTimeout(heartbeat, 3000);
 }
 function scheduleHeartbeat(ms) { clearTimeout(hbTimer); hbTimer = setTimeout(heartbeat, ms); }
 
 function qPayload() {
-  const q = QUESTIONS[S.qi];
+  const q = QUIZ[S.qi];
   return { i: S.qi, text: q.text, opts: q.options, dur: CONFIG.QUESTION_TIME };
 }
 
@@ -187,7 +196,7 @@ function updateCount() {
 
 function buildQR() {
   const u = new URL('play.html', location.href);
-  u.search = '?room=' + room;
+  u.search = '?room=' + room + (params.has('local') ? '&local' : '');
   const url = u.toString();
   const qr = qrcode(0, 'H');
   qr.addData(url);
@@ -211,10 +220,28 @@ const FX = {
   zap: sfx.zap, bonk: sfx.bonk, boo: sfx.boo, wrong: sfx.wrong, thud: sfx.thud, sparkle: sfx.sparkle,
 };
 
+async function refreshQuiz() {
+  try {
+    const fresh = await Promise.race([loadLatestQuiz(), new Promise((r) => setTimeout(() => r(null), 4000))]);
+    if (fresh && fresh.questions.length) quizInfo = fresh;
+  } catch (e) { /* keep the previous quiz */ }
+  QUIZ = toGame(quizInfo.questions);
+  showQuizInfo();
+  pushCtl();
+}
+function showQuizInfo() {
+  const n = quizInfo.questions.length;
+  $('quiz-info').textContent = quizInfo.version ? `Quiz v${quizInfo.version} · ${n} questions` : `Default quiz · ${n} questions`;
+}
+
 async function startGame(skipConfirm = false) {
   sfx.audioUnlock();
   if (!skipConfirm && !S.players.size && !confirm('No players have joined yet. Start anyway?')) return;
   stopBots();
+  if (S.starting) return;
+  S.starting = true;
+  await refreshQuiz(); // always play the most recently saved version, freshly shuffled
+  S.starting = false;
   S.phase = 'intro';
   S.qi = -1;
   const run = ++S.run;
@@ -237,20 +264,20 @@ async function startGame(skipConfirm = false) {
 // 1) the mascot floats to the next spot in the hallway (spooky event)
 async function nextQuestion() {
   S.qi++;
-  if (S.qi >= QUESTIONS.length) return showFinal();
+  if (S.qi >= QUIZ.length) return showFinal();
   S.answers.clear();
   S.phase = 'walk';
   const my = S.qi, run = S.run;
   const scr = $('scr-question');
   scr.classList.remove('reveal', 'pre'); scr.classList.add('walk');
-  $('walk-num').textContent = `Question ${S.qi + 1} of ${QUESTIONS.length}`;
-  $('q-num').innerHTML = `${S.qi + 1}<small>of ${QUESTIONS.length}</small>`;
+  $('walk-num').textContent = `Question ${S.qi + 1} of ${QUIZ.length}`;
+  $('q-num').innerHTML = `${S.qi + 1}<small>of ${QUIZ.length}</small>`;
   $('tiles').innerHTML = '';
   $('ans-count').textContent = '0';
   show('scr-question');
   setNext('Skip ⏭');
   sfx.ambientStart();
-  send({ t: 'walk', i: S.qi, total: QUESTIONS.length });
+  send({ t: 'walk', i: S.qi, total: QUIZ.length });
   scheduleHeartbeat(500);
   await stage.walkTo(S.qi, FX);
   if (S.phase === 'walk' && S.qi === my && S.run === run) showPre();
@@ -259,14 +286,14 @@ async function nextQuestion() {
 // 2) the question card appears
 function showPre() {
   S.phase = 'pre';
-  const q = QUESTIONS[S.qi];
+  const q = QUIZ[S.qi];
   const scr = $('scr-question');
   scr.classList.remove('walk', 'reveal'); scr.classList.add('pre');
   const qt = $('q-text');
   qt.textContent = q.text;
   qt.classList.remove('pop'); void qt.offsetWidth; qt.classList.add('pop');
   sfx.gong();
-  send({ t: 'pre', ...qPayload(), total: QUESTIONS.length });
+  send({ t: 'pre', ...qPayload(), total: QUIZ.length });
   scheduleHeartbeat(500);
   const bar = $('pre-bar');
   bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)';
@@ -278,7 +305,7 @@ function showPre() {
 }
 
 function openQuestion() {
-  const q = QUESTIONS[S.qi];
+  const q = QUIZ[S.qi];
   S.phase = 'open';
   const scr = $('scr-question');
   scr.classList.remove('pre');
@@ -293,7 +320,7 @@ function openQuestion() {
     tiles.appendChild(t);
   });
   S.openedAt = performance.now();
-  send({ t: 'open', ...qPayload(), total: QUESTIONS.length });
+  send({ t: 'open', ...qPayload(), total: QUIZ.length });
   scheduleHeartbeat(1500);
   runTimer();
   startBots();
@@ -332,7 +359,7 @@ function closeQuestion() {
   cancelAnimationFrame(timerRAF);
   stopBots();
   S.phase = 'reveal';
-  const q = QUESTIONS[S.qi];
+  const q = QUIZ[S.qi];
   // score everyone
   const prevRank = new Map(ranked().map((p, i) => [p.id, i + 1]));
   S.lastRanks = prevRank;
@@ -364,7 +391,7 @@ function closeQuestion() {
   const banner = $('result-banner');
   banner.textContent = answeredN ? `${nCorrect} / ${S.players.size} got it right!` : 'Nobody answered… spooky!';
   banner.style.color = good ? 'var(--green)' : 'var(--red)';
-  send({ t: 'reveal', q: S.qi, correct: q.answer, res: resultsPayload(), total: QUESTIONS.length });
+  send({ t: 'reveal', q: S.qi, correct: q.answer, res: resultsPayload(), total: QUIZ.length });
   scheduleHeartbeat(3000);
   save();
   setNext('Scoreboard ▶');
@@ -387,7 +414,7 @@ function showBoard() {
   const top = list.slice(0, 5);
   const box = $('board-list');
   box.innerHTML = '';
-  $('board-sub').textContent = `After question ${S.qi + 1} of ${QUESTIONS.length}`;
+  $('board-sub').textContent = `After question ${S.qi + 1} of ${QUIZ.length}`;
   top.forEach((p, i) => {
     const row = el('div', 'row');
     const rk = el('div', 'rk'); rk.textContent = i + 1;
@@ -411,7 +438,7 @@ function showBoard() {
   for (const p of list) if (p.last && p.last.ok && (!fastest || p.last.ms < fastest.last.ms)) fastest = p;
   $('fastest').textContent = fastest ? `⚡ Fastest correct answer: ${fastest.name} in ${(fastest.last.ms / 1000).toFixed(2)}s (+${fastest.last.gain})` : '';
   send({ t: 'board' });
-  setNext(S.qi + 1 >= QUESTIONS.length ? 'Final results 🏆' : 'Next question ▶');
+  setNext(S.qi + 1 >= QUIZ.length ? 'Final results 🏆' : 'Next question ▶');
   if (CONFIG.AUTO_ADVANCE) autoAdvance(CONFIG.AUTO_ADVANCE_DELAY);
 }
 
@@ -436,7 +463,7 @@ async function showFinal() {
       const crown = el('div', 'crown'); crown.textContent = crowns[idx];
       const nm = el('div', 'nm'); nm.textContent = p.name;
       const sc = el('div', 'sc'); sc.textContent = p.score.toLocaleString('en-US') + ' pts';
-      const cc = el('div', 'cc'); cc.textContent = `${p.correct || 0} / ${QUESTIONS.length} correct`;
+      const cc = el('div', 'cc'); cc.textContent = `${p.correct || 0} / ${QUIZ.length} correct`;
       d.append(crown, avatarEl(p.avatar), nm, sc, cc);
     }
     const block = el('div', 'block'); block.textContent = idx + 1;
@@ -453,7 +480,7 @@ async function showFinal() {
     r.querySelector('span').textContent = p.name;
     rest.appendChild(r);
   });
-  send({ t: 'final', res: resultsPayload(), top: list.slice(0, 3).map((p) => [p.name, p.avatar, p.score]), total: QUESTIONS.length });
+  send({ t: 'final', res: resultsPayload(), top: list.slice(0, 3).map((p) => [p.name, p.avatar, p.score]), total: QUIZ.length });
   scheduleHeartbeat(3000);
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   sfx.drumroll(1.6); await wait(1700); nodes[2].classList.add('show'); sfx.pop();
@@ -528,6 +555,46 @@ function next() {
   }
 }
 
+// ============================================================ game-master remote (BOS-HOST)
+async function handleCtl(m) {
+  const code = String(m.code || '').trim().toUpperCase();
+  if (!ctlCodes.has(code)) {
+    let ok = false;
+    try { ok = await verifyCode(code); } catch (e) { ok = false; }
+    ctlCodes.set(code, ok);
+  }
+  if (!ctlCodes.get(code)) { ctlOut && ctlOut.send({ t: 'cerr', to: m.id, msg: 'Wrong game-master code' }); return; }
+  if (!stage) return pushCtl();
+  switch (m.cmd) {
+    case 'start': if (S.phase === 'lobby') startGame(true); break;
+    case 'next': if (S.phase !== 'lobby') next(); break;
+    case 'skip': if (['intro', 'walk', 'pre', 'open'].includes(S.phase)) next(); break;
+    case 'restart': restartGame(false); break;
+    case 'exit': if (S.phase !== 'lobby') backToLobby(false); break;
+    case 'reload': await refreshQuiz(); break;
+    case 'kick': if (m.pid) kick(m.pid); break;
+    default: break; // 'hello' → just send the state
+  }
+  setTimeout(pushCtl, 150);
+}
+
+function pushCtl() {
+  if (!ctlOut) return;
+  const q = QUIZ[S.qi];
+  const counts = [0, 0, 0, 0];
+  for (const a of S.answers.values()) counts[a.c] = (counts[a.c] || 0) + 1;
+  const showQ = q && ['walk', 'pre', 'open', 'reveal', 'board'].includes(S.phase);
+  ctlOut.send({
+    t: 'cs', ph: S.phase, qi: S.qi, total: QUIZ.length, room,
+    q: showQ ? { text: q.text, opts: q.options, answer: q.answer } : null,
+    answered: S.answers.size, counts, players: S.players.size,
+    left: S.phase === 'open' ? Math.max(0, CONFIG.QUESTION_TIME * 1000 - (performance.now() - S.openedAt)) : null,
+    top: ranked().slice(0, 5).map((p) => [p.name, p.score, p.avatar]),
+    names: [...S.players.values()].filter((p) => !p.bot).slice(0, 120).map((p) => [p.id, p.name]),
+    quiz: { version: quizInfo.version, n: quizInfo.questions.length, source: quizInfo.source },
+  });
+}
+
 // ============================================================ bots (rehearsal)
 const BOT_NAMES = ['Minh', 'Lan', 'Tuấn', 'Hoa', 'Khang', 'Vy', 'Bảo', 'Thảo', 'Nam', 'Linh', 'Phúc', 'Trang', 'Đức', 'My', 'Huy', 'Ngọc', 'Quân', 'Hân', 'Long', 'Mai', 'Sơn', 'Yến', 'Tâm', 'An', 'Kiệt', 'Nhi', 'Dũng', 'Thư', 'Hải', 'Châu', 'Pumpkin King', 'Spooky Sam', 'Boo Berry', 'Count Snack', 'Witchy Wu', 'Mr. Bones', 'Casper', 'Vampy', 'Mummy Max', 'Zombie Zoe'];
 let botTimers = [];
@@ -542,7 +609,7 @@ function addBots(n) {
 }
 function startBots() {
   stopBots();
-  const q = QUESTIONS[S.qi];
+  const q = QUIZ[S.qi];
   for (const p of S.players.values()) {
     if (!p.bot) continue;
     const ms = 1200 + Math.random() * (CONFIG.QUESTION_TIME * 1000 - 2500);
@@ -558,12 +625,19 @@ async function boot() {
   buildQR();
   // listen for players right away (even while the 3D scene is still loading)
   net = createHostNet(room, { onPlayerMsg, onStatus: (s) => { if (s !== 'SUBSCRIBED') console.warn('realtime', s); } });
+  ctlOut = createHostCtlOut(room);
+  setInterval(pushCtl, 1000);
+  mountGameMasterButton({ room, newTab: true });
   show('scr-lobby');
+  // latest saved quiz (Supabase) — correct answers are shuffled to random tiles
+  quizInfo = await loadLatestQuiz();
+  if (!(restored && QUIZ.length)) QUIZ = toGame(quizInfo.questions);
+  showQuizInfo();
   const { Stage } = await import('./stage3d.js');
   stage = new Stage($('stage'));
   window.__stage = stage;
   $('btn-start').disabled = true;
-  await stage.load((k) => { $('loading').querySelector('.bar i').style.width = Math.round(k * 100) + '%'; }, QUESTIONS.length);
+  await stage.load((k) => { $('loading').querySelector('.bar i').style.width = Math.round(k * 100) + '%'; }, Math.max(QUIZ.length, 8));
   $('btn-start').disabled = false;
   $('loading').style.opacity = '0';
   setTimeout(() => $('loading').remove(), 700);
@@ -590,7 +664,7 @@ async function boot() {
   });
   // first click anywhere unlocks audio + lobby ambience
   addEventListener('pointerdown', () => { sfx.audioUnlock(); if (S.phase === 'lobby') sfx.ambientStart(); }, { once: true });
-  window.__host = { S, next, addBots, restartGame, backToLobby };
+  window.__host = { S, next, addBots, restartGame, backToLobby, get QUIZ() { return QUIZ; } };
 }
 function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
 function toggleMute() { const m = sfx.toggleMute(); $('btn-mute').textContent = m ? '🔇' : '🔊'; }

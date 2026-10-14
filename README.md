@@ -11,28 +11,21 @@ Chạy hoàn toàn tĩnh (deploy **Vercel** hoặc GitHub Pages, không cần bu
 
 ---
 
-## 1. Supabase (5 phút, làm 1 lần)
+## 1. Supabase (đã điền key sẵn trong `js/config.js`)
 
-1. Vào <https://supabase.com> → đăng nhập bằng GitHub → **New project**.
-   - Organization: chọn cái có sẵn (Free).
-   - Project name: `haunted-quiz` · Database password: bấm *Generate* (không cần nhớ, game không dùng DB) · Region: **Southeast Asia (Singapore)** cho nhanh.
-   - Bấm **Create new project**, đợi ~1–2 phút.
-2. Lấy 2 giá trị (nút **Connect** ở đầu trang, hoặc **Project Settings → API Keys / Data API**):
-   - **Project URL**: dạng `https://abcdxyz.supabase.co`
-   - **Publishable key** (`sb_publishable_...`) — hoặc **anon public** key (`eyJ...`) ở tab *Legacy API keys*. Dùng cái nào cũng được.
-   - ⚠️ KHÔNG dùng `service_role` / `secret` key.
-3. Mở `js/config.js`, dán vào:
-   ```js
-   SUPABASE_URL: 'https://abcdxyz.supabase.co',
-   SUPABASE_ANON_KEY: 'sb_publishable_xxxxxxxx',
-   ```
-4. Vào **Realtime → Settings**: để **Allow public access = ON** (mặc định đã bật; KHÔNG bật "Private channels only"). Bấm Save nếu có đổi.
+Project: `https://elierbdgpqqjxgngvxqo.supabase.co` · key `sb_publishable_...` (key công khai, để trong code là bình thường).
 
-> Không cần tạo bảng hay viết SQL. Game chỉ dùng kênh Broadcast của Realtime.
-> Publishable/anon key là key công khai, để trong code public là bình thường.
-> Gói Free: 200 kết nối đồng thời, đủ cho ~80 người + host. Project Free bị *pause* sau 7 ngày không dùng → trước buổi chơi mở dashboard kiểm tra, nếu "Paused" thì bấm **Restore**.
+**Bắt buộc làm 1 lần — tạo bảng lưu câu hỏi + mã quản trò:**
+1. Vào <https://supabase.com/dashboard> → mở project → menu trái **SQL Editor** → **New query**.
+2. Mở file `supabase/setup.sql` trong repo, copy **toàn bộ** nội dung, dán vào → bấm **Run** (góc dưới phải).
+   Thấy "Success" + 1 bảng kết quả trống là xong.
+3. **Realtime → Settings**: để **Allow public access = ON** (mặc định), KHÔNG bật "Private channels only".
 
-Chưa điền key → game chạy **LOCAL DEMO**: host và người chơi phải là các tab trong cùng một trình duyệt (để thử nhanh).
+> Mã quản trò `BOS-HOST` nằm trong database (file SQL), không nằm trong code web → người chơi xem code cũng không thấy.
+> Đổi mã: sửa chữ `'BOS-HOST'` ở **cả 2 chỗ** trong `supabase/setup.sql` rồi Run lại.
+> Gói Free bị *Paused* sau 7 ngày không dùng → trước buổi chơi mở dashboard, nếu Paused thì bấm **Restore**.
+
+Muốn tập dượt không cần mạng: thêm `?local` vào link (vd. `/?local`) → host + người chơi là các tab trong cùng 1 trình duyệt.
 
 ## 2. Đưa lên GitHub → deploy Vercel
 
@@ -80,13 +73,19 @@ Link dùng:
 2. Người chơi quét QR → nhập tên → chọn avatar → vào sảnh. Click vào tên trên sảnh để kick.
 3. **Start the game** → camera bay tới lâu đài, sấm chớp + tiếng cười → cổng lâu đài mở → mascot run rẩy bay vào **hành lang ma**.
 4. Mỗi câu hỏi:
-   - **Đi sâu vào hành lang (~4 giây)**: mascot bay tới điểm dừng tiếp theo + 1 sự kiện ma ám: đèn chập chờn / bức tranh lệch và mắt người phụ nữ dõi theo / cánh cửa rung có tiếng gõ / đồng hồ quả lắc rung chuông / mất điện thấy đôi mắt đỏ trong bóng tối.
-   - **Khung câu hỏi** hiện ra (3 giây) → **4 đáp án** + đếm ngược 20 giây (hết giờ hoặc mọi người đã trả lời thì tự chốt).
+   - **Đi sâu vào hành lang (~4 giây)**: mascot đi bình thường tới điểm dừng tiếp theo + 1 sự kiện ma ám: đèn chập chờn / bức tranh lệch và mắt người phụ nữ dõi theo / cánh cửa rung có tiếng gõ / đồng hồ quả lắc rung chuông / mất điện thấy đôi mắt đỏ trong bóng tối.
+   - **Khung câu hỏi** hiện ra (3 giây; điện thoại cũng hiện câu hỏi + 4 đáp án) → **4 đáp án** + đếm ngược 20 giây (hết giờ hoặc mọi người đã trả lời thì tự chốt).
    - **Chốt**: đáp án đúng sáng lên + số người chọn từng đáp án, rồi:
      - Đa số **đúng** → con ma lao ra (từ cánh cửa / bức tranh / xuyên tường) nhưng bị **thế lực bí ẩn chặn lại**: khiên phép thuật "BONK!" hoặc vòng xoáy hút ngược con ma.
      - Đa số **sai** → con ma **trả đũa**: tắt đèn, "BOO!!", mascot xoay vòng ngã lăn ra choáng váng.
 5. **Next / Space** → Scoreboard (top 5, điểm cộng câu đó + thời gian trả lời, người nhanh nhất) → câu tiếp theo.
+   - Điện thoại có cảnh hành lang mini riêng: mascot đi, sự kiện ma ám, ma bị chặn / ma hù y như màn chiếu.
 6. Sau câu cuối → **podium Top 3** + tổng điểm, bảng hạng 4–12. Mỗi điện thoại hiện hạng của chính mình.
+
+**Quản trò (mã `BOS-HOST`):** bấm biểu tượng **⚠** nhỏ ở góc trên bên phải (có trên màn chiếu lẫn điện thoại) → nhập `BOS-HOST` → mở trang **Game Master** (`control.html`):
+- Tab **🎮 Live control**: thấy câu hỏi đang chạy + 4 đáp án (đáp án đúng có ✓), số người đã trả lời từng đáp án, thời gian còn lại, bảng xếp hạng. Nút **Start / Skip / Next question / End question / Restart / Exit to lobby**, kick người chơi. Điện thoại của quản trò thành cái remote — không cần đứng ở máy chiếu.
+- Tab **✏️ Questions**: sửa trực tiếp câu hỏi, ô xanh = đáp án đúng, 3 ô đỏ = đáp án sai; thêm/xoá/đổi thứ tự câu → **💾 Save**. Mỗi lần Save tạo 1 phiên bản mới (v1, v2…); game luôn lấy **bản Save gần nhất** khi bấm Start, và **đáp án đúng được xáo vào ô ngẫu nhiên** mỗi ván.
+- Màn chiếu hiện dòng "Quiz vN · X questions" dưới mã PIN để biết đang dùng bản nào.
 
 **Nút điều khiển (góc dưới trái, khi đang chơi):**
 - **⟲ Restart** — chơi lại từ đầu (intro + câu 1) với cùng người chơi, điểm về 0.
@@ -103,7 +102,8 @@ Phím tắt host: `Space`/`Enter`/`→` = Next (hoặc Skip) · `F` = fullscreen
 
 ## 4. Chỉnh sửa
 
-- **Câu hỏi / thời gian / điểm**: `js/config.js` (`QUESTIONS`, `QUESTION_TIME`, `MAX_POINTS`, `AUTO_ADVANCE`).
+- **Câu hỏi**: sửa trên trang Game Master (mã BOS-HOST). `QUESTIONS` trong `js/config.js` chỉ là bộ mặc định khi chưa Save lần nào.
+- **Thời gian / điểm**: `js/config.js` (`QUESTION_TIME`, `MAX_POINTS`, `AUTO_ADVANCE`).
 - **Avatar**: 14 nhân vật trong `assets/avatars/*.webp` (256px, nền trong suốt). Thêm/bớt: bỏ file vào thư mục rồi sửa danh sách `AVATARS` trong `js/config.js` (id = tên file).
 - **Mascot**: tạm thời là hình phù thủy 2D bay lơ lửng (`MASCOT` trong `js/config.js`). Khi có mascot 3D mới sẽ thay vào + làm animation riêng.
 - **Hành lang ma**: `assets/models/hallway.glb` (Diorama Haunted Hallway, đã nén 8 MB → 2.2 MB). Game ghép nhiều đoạn hành lang hai bên tường thành 1 hành lang dài nhiều cửa; mỗi câu hỏi là 1 điểm dừng (`stations`, tự sinh theo số câu hỏi).

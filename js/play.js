@@ -1,7 +1,8 @@
 // ============================================================
 //  PLAYER (phone) — lightweight, no 3D
 // ============================================================
-import { AVATARS, ANSWER_STYLES, CONFIG } from './config.js';
+import { AVATARS, ANSWER_STYLES, CONFIG, MASCOT } from './config.js';
+import { mountGameMasterButton } from './gm.js';
 import { createPlayerNet } from './net.js';
 import { SHAPES, el, avatarEl, ordinal } from './ui.js';
 
@@ -113,7 +114,7 @@ function onHostMsg(m) {
     case 'walk': return joined && showWalk(m);
     case 'pre': return joined && showPre(m);
     case 'open': return joined && openAnswer(m, m.dur * 1000);
-    case 'reveal': return joined && showResult(m.res && m.res[pid], m.q);
+    case 'reveal': Q.correct = m.correct; return joined && showResult(m.res && m.res[pid], m.q);
     case 'final': return joined && showFinal(m);
     case 'reset': if (joined) { setScore(0); lastResultQ = -1; Q.answered = -1; show('wait'); } return;
     default:
@@ -133,8 +134,29 @@ function onHeartbeat(m) {
   else if (m.ph === 'walk' && view !== 'walk') showWalk({ i: m.q, total: m.total });
   else if (m.ph === 'pre' && m.qd && (view !== 'pre' || Q.i !== m.qd.i)) showPre({ ...m.qd, total: m.total });
   else if (m.ph === 'open' && m.qd && Q.answered !== m.qd.i && (view !== 'answer' || Q.i !== m.qd.i)) openAnswer({ ...m.qd, total: m.total }, m.rem);
-  else if ((m.ph === 'reveal' || m.ph === 'board') && m.res && lastResultQ !== m.q) showResult(m.res[pid], m.q);
+  else if ((m.ph === 'reveal' || m.ph === 'board') && m.res && lastResultQ !== m.q) { if (m.qd) { Q.text = m.qd.text; Q.opts = m.qd.opts; } if (m.cor != null) Q.correct = m.cor; showResult(m.res[pid], m.q); }
   else if (m.ph === 'final' && view !== 'final' && m.res) showFinal({ res: m.res, top: null });
+}
+
+// ---------------- mini haunted-hallway scene ----------------
+const EVENTS = ['flicker', 'painting', 'door', 'clock', 'blackout'];
+const EVENT_TEXT = {
+  flicker: 'Eek! The lights! 😨', painting: 'Did… did she just look at me?! 😨', door: 'Knock… knock… 🚪 Who’s there?!',
+  clock: 'DONG… DONG… 🕛', blackout: 'I-it’s so dark… 👀',
+};
+const MS = $('ms');
+$('ms-mascot-img').src = MASCOT.sprite;
+let bubbleT = 0;
+function playStage(viewId, size, cls, bubble, bubbleAt = 0) {
+  const slot = document.querySelector(`#v-${viewId} .ms-slot`);
+  if (slot && MS.parentElement !== slot) slot.appendChild(MS);
+  MS.className = 'ministage ' + size;
+  void MS.offsetWidth; // restart CSS animations
+  MS.className = `ministage ${size} ${cls}`;
+  const b = $('ms-bubble');
+  b.classList.remove('show');
+  clearTimeout(bubbleT);
+  if (bubble) bubbleT = setTimeout(() => { b.textContent = bubble; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }, bubbleAt);
 }
 
 // ---------------- question ----------------
@@ -142,16 +164,42 @@ function showWalk(m) {
   Q.total = m.total || Q.total;
   $('walk-num').textContent = `Question ${m.i + 1} of ${Q.total}`;
   show('walk');
+  const ev = EVENTS[m.i % EVENTS.length];
+  playStage('walk', 'big', `walk ev ev-${ev}`, EVENT_TEXT[ev], 2400);
+}
+
+function optChip(i, text, cls = 'preopt') {
+  const st = ANSWER_STYLES[i];
+  const d = el('div', cls);
+  d.style.setProperty('--c', st.color);
+  d.innerHTML = `<span class="shape">${SHAPES[st.shape]}</span><span class="t"></span>`;
+  d.querySelector('.t').textContent = text;
+  return d;
 }
 
 function showPre(m) {
-  Q.i = m.i; Q.total = m.total || Q.total;
+  Q.i = m.i; Q.total = m.total || Q.total; Q.text = m.text; Q.opts = m.opts || [];
   $('pre-num').textContent = `Question ${m.i + 1} of ${Q.total}`;
   $('pre-text').textContent = m.text;
+  const box = $('pre-opts');
+  box.innerHTML = '';
+  Q.opts.forEach((o, i) => box.appendChild(optChip(i, o)));
   show('pre');
   const bar = $('pre-bar');
   bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)'; void bar.offsetWidth;
   bar.style.transition = `transform ${CONFIG.QUESTION_PREVIEW}s linear`; bar.style.transform = 'scaleX(0)';
+}
+
+function showLocked(choice, note) {
+  $('lk-num').textContent = `${Q.i + 1}/${Q.total}`;
+  $('lk-text').textContent = Q.text || '';
+  const p = $('picked');
+  p.innerHTML = '';
+  if (choice == null) { p.style.setProperty('--c', '#3a2f4a'); p.textContent = '⌛ No answer'; }
+  else { const st = ANSWER_STYLES[choice]; p.style.setProperty('--c', st.color); p.innerHTML = `<span class="shape">${SHAPES[st.shape]}</span><span></span>`; p.lastChild.textContent = 'Your answer: ' + (Q.opts[choice] || ''); }
+  $('locked-time').textContent = note || '';
+  show('locked');
+  playStage('locked', 'small', 'idle');
 }
 
 function openAnswer(m, remainingMs) {
@@ -186,7 +234,7 @@ function runTimer() {
     bar.style.transform = `scaleX(${left / Q.dur})`;
     num.textContent = Math.ceil(left / 1000);
     wrap.classList.toggle('urgent', left < 5000);
-    if (left <= 0) { show('locked'); $('picked').innerHTML = '⌛'; $('picked').style.background = '#333'; $('locked-time').textContent = "Time's up!"; return; }
+    if (left <= 0) { showLocked(null, "Time's up!"); return; }
     Q.timerRAF = requestAnimationFrame(loop);
   };
   loop();
@@ -200,12 +248,7 @@ function answer(c, btn) {
   $('abtns').classList.add('done');
   buzz(40);
   net.send({ t: 'ans', id: pid, q: Q.i, c, ms });
-  const st = ANSWER_STYLES[c];
-  const p = $('picked');
-  p.style.background = st.color;
-  p.innerHTML = `<span class="shape">${SHAPES[st.shape]}</span>`;
-  $('locked-time').textContent = `Answered in ${(ms / 1000).toFixed(1)}s`;
-  setTimeout(() => { if (view === 'answer') show('locked'); }, 150);
+  setTimeout(() => { if (view === 'answer') showLocked(c, `Answered in ${(ms / 1000).toFixed(1)}s`); }, 150);
 }
 
 // ---------------- result ----------------
@@ -226,15 +269,17 @@ function showResult(res, q) {
   $('streak').textContent = good && streak > 1 ? `🔥 ${streak} in a row!` : '';
   $('rank').textContent = ordinal(rank);
   $('behind').textContent = rank === 1 ? "You're leading the coven! 👑" : behind === 0 ? `Tied with ${ahead}` : `${behind.toLocaleString('en-US')} pts behind ${ahead}`;
-  const skit = $('skit');
-  if (good) {
-    skit.className = 'skit block';
-    skit.innerHTML = '<span class="ghost">👻</span><span class="shield"></span><span class="wiz">🧙</span><span class="spark">✨</span>';
-  } else {
-    skit.className = 'skit scare';
-    skit.innerHTML = '<span class="wiz">🧙</span><span class="soul">🧙</span><span class="hat">🎩</span><span class="ghost">👻</span>';
-  }
+  const ca = $('correct-ans');
+  if (Q.correct != null && Q.opts && Q.opts[Q.correct] != null) {
+    const st = ANSWER_STYLES[Q.correct];
+    ca.innerHTML = `Correct answer: <span class="shape" style="color:${st.color}">${SHAPES[st.shape]}</span> <b></b>`;
+    ca.querySelector('b').textContent = Q.opts[Q.correct];
+    ca.querySelector('svg *').setAttribute('fill', st.color);
+    ca.classList.remove('hidden');
+  } else ca.classList.add('hidden');
   show('result');
+  if (good) playStage('result', 'mid', q % 2 ? 'res-vortex' : 'res-shield', 'Phew! A mysterious force saved me ✨', 1300);
+  else playStage('result', 'mid', 'res-scare', ok === -1 ? 'Too slow… 😵' : 'Ouch… 😵‍💫', 1900);
   document.body.classList.toggle('good', good);
   document.body.classList.toggle('bad', !good);
   buzz(good ? [30, 40, 30] : [120]);
@@ -262,6 +307,10 @@ function showFinal(m) {
 
 // ---------------- boot ----------------
 buildJoin();
+mountGameMasterButton({
+  getRoom: () => room,
+  beforeLeave: () => { if (joined && net) net.send({ t: 'leave', id: pid }); sess.del('hq-joined'); },
+});
 $('btn-leave').onclick = () => {
   if (!confirm('Leave the game? Your score will be lost.')) return;
   if (net) net.send({ t: 'leave', id: pid });

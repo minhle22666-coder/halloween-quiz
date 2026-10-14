@@ -6,7 +6,7 @@
 export const CONFIG = {
   // ---- Supabase Realtime (see README.md → "1. Supabase") ----
   // Leave empty to run in LOCAL DEMO mode (host + players as tabs in one browser).
-  SUPABASE_URL: 'https://elierbdgpqqjxgngvxqo.supabase.co',        
+  SUPABASE_URL: 'https://elierbdgpqqjxgngvxqo.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_UMrty-swTbaZJhfTEXUqpg_SUxfq_hb',   // Publishable key (sb_publishable_...) or legacy anon key (eyJ...) — safe to publish
 
   // ---- Game timing (seconds) ----
@@ -35,7 +35,9 @@ export const ANSWER_STYLES = [
   { key: 'D', shape: 'square',   color: '#2fae6a', dark: '#1b7243' },
 ];
 
-// ---- Questions: `answer` is the index of the correct option (0 = A) ----
+// ---- Default questions (used until a quiz is saved from the game-master screen) ----
+// `answer` = index of the correct option. The order of the options is shuffled every game,
+// so the correct answer lands on a random tile.
 export const QUESTIONS = [
   {
     text: 'What is the capital of France?',

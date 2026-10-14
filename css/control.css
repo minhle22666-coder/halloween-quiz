@@ -1,0 +1,72 @@
+/* ================= GAME MASTER panel ================= */
+body { overflow-y: auto; min-height: 100dvh; background: radial-gradient(ellipse at 50% -10%, #3a1a5e, #12081f 60%); }
+.login { min-height: 100dvh; display: grid; place-items: center; padding: 20px; }
+.login .back { color: var(--muted); font-size: 14px; }
+#app { max-width: 760px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 90px); }
+.gmtop { display: flex; align-items: center; gap: 10px; padding: 6px 44px 10px 0; }
+.gmtop .brand { flex: 1; color: #ffd166; font-size: 18px; }
+.gmtop .brand b { color: #fff; }
+.gmtop .pin { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.gmtop .pin input { width: 92px; font: 700 18px var(--body); letter-spacing: 3px; text-align: center; border-radius: 10px; border: 0; padding: 6px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; background: #ff4d5e; box-shadow: 0 0 8px #ff4d5e; }
+.dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.link { background: none; border: 0; font-size: 18px; color: var(--muted); }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: rgba(255, 255, 255, .06); padding: 5px; border-radius: 14px; margin-bottom: 12px; position: sticky; top: 0; z-index: 5; backdrop-filter: blur(8px); }
+.tab { border: 0; border-radius: 10px; padding: 10px; font: 600 15px var(--body); color: var(--muted); background: transparent; }
+.tab.on { background: var(--orange); color: #2a1200; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+.card h4 { margin: 0 0 8px; }
+.status { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; }
+.status div { display: flex; flex-direction: column; min-width: 0; }
+.status .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.status b { font-size: 16px; }
+@media (max-width: 520px) { .status { grid-template-columns: 1fr 1fr; } .status div:first-child { grid-column: 1 / -1; } }
+.hint { background: rgba(255, 140, 0, .14); border: 1px solid rgba(255, 140, 0, .35); color: #ffd9a8; padding: 10px 12px; border-radius: 12px; margin-bottom: 12px; font-size: 14px; }
+.question .qhead { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+.qno { background: var(--orange); color: #2a1200; font-weight: 700; border-radius: 8px; padding: 2px 8px; flex: none; }
+.qtext { font-weight: 700; font-size: 18px; line-height: 1.25; }
+.opts { display: grid; gap: 6px; }
+.opt { position: relative; overflow: hidden; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 2px solid transparent; }
+.opt .shape { font-size: 18px; color: var(--c); }
+.opt .shape svg path, .opt .shape svg circle, .opt .shape svg rect { fill: var(--c); }
+.opt .t { flex: 1; font-weight: 600; position: relative; z-index: 1; }
+.opt .n { font-weight: 700; position: relative; z-index: 1; }
+.opt .ok { background: var(--green); color: #06311b; border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; font-weight: 700; position: relative; z-index: 1; }
+.opt i { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--c) 35%, transparent); transition: width .4s; }
+.opt.right { border-color: var(--green); }
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.controls .big { grid-column: 1 / -1; font-size: 22px; padding: 18px; }
+.controls .btn { font-size: 16px; padding: 12px; }
+.controls .danger { color: #ffb3b9; }
+.btn:disabled { opacity: .45; }
+ol.lb { margin: 0; padding-left: 22px; }
+ol.lb li { padding: 4px 0; }
+ol.lb li { display: list-item; }
+ol.lb li span { display: inline-block; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+ol.lb li b { float: right; color: var(--orange2); }
+details summary { cursor: pointer; font-weight: 600; }
+.plist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.pchip { background: rgba(255, 255, 255, .07); border-radius: 99px; padding: 4px 4px 4px 10px; font-size: 14px; }
+.pchip button { border: 0; background: rgba(255, 77, 94, .3); color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 12px; }
+.quizv { text-align: center; color: var(--muted); font-size: 13px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; margin-top: 6px; }
+.ok { color: var(--green); } .bad { color: #ff8a95; }
+/* editor */
+.qedit { display: flex; flex-direction: column; gap: 8px; }
+.qe-head { display: flex; align-items: center; }
+.qe-head b { flex: 1; }
+.qe-tools button { border: 0; background: rgba(255, 255, 255, .08); color: #fff; border-radius: 8px; width: 34px; height: 30px; margin-left: 4px; font-size: 15px; }
+.qedit textarea, .qedit input { width: 100%; font: 600 16px var(--body); border-radius: 10px; border: 2px solid transparent; padding: 10px; color: #1d0f38; background: #fff; resize: vertical; outline: none; }
+.qedit textarea:focus, .qedit input:focus { border-color: var(--orange); }
+.ans { display: flex; align-items: center; gap: 8px; }
+.ans span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; flex: none; }
+.ans.ok span { background: var(--green); color: #06311b; }
+.ans.ok input { border-color: rgba(61, 220, 132, .7); }
+.ans.bad span { background: rgba(255, 77, 94, .35); color: #fff; }
+.add { width: 100%; margin-bottom: 12px; }
+.savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; align-items: center; gap: 12px; justify-content: flex-end; padding: 12px max(14px, calc(50% - 366px)) calc(env(safe-area-inset-bottom) + 12px); background: rgba(12, 5, 26, .92); border-top: 1px solid var(--line); backdrop-filter: blur(8px); }
+.savebar span { flex: 1; font-size: 14px; }
+.savebar span.warn { color: #ffd166; }
+.savebar .btn { padding: 12px 26px; }
+.toast { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 99; background: #2a1450; border: 1px solid var(--line); padding: 10px 16px; border-radius: 12px; max-width: 92vw; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }

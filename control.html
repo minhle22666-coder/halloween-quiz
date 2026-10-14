@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#140a26">
+  <title>Haunted Quiz — Game Master</title>
+  <link rel="icon" href="assets/img/pumpkin.svg">
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/control.css">
+  <script src="lib/supabase.js"></script>
+</head>
+<body>
+  <!-- LOGIN -->
+  <main id="login" class="login hidden">
+    <form class="gm-card" id="login-form" autocomplete="off">
+      <div class="gm-icon">⚠</div>
+      <h3>Game master</h3>
+      <p>Enter the game-master code.</p>
+      <input id="login-code" placeholder="Code" autocapitalize="characters" spellcheck="false">
+      <div class="gm-err" id="login-err"></div>
+      <button class="btn" type="submit">Unlock</button>
+      <a class="back" href="index.html">← Back</a>
+    </form>
+  </main>
+
+  <!-- APP -->
+  <div id="app" class="hidden">
+    <header class="gmtop">
+      <div class="brand">⚠ <b>Game Master</b></div>
+      <label class="pin">PIN <input id="pin" inputmode="numeric" maxlength="6" placeholder="------"></label>
+      <span class="dot" id="dot" title="connection"></span>
+      <button class="link" id="logout" title="Lock">🔒</button>
+    </header>
+    <nav class="tabs">
+      <button class="tab on" data-tab="live">🎮 Live control</button>
+      <button class="tab" data-tab="edit">✏️ Questions</button>
+    </nav>
+
+    <!-- LIVE -->
+    <section id="tab-live" class="tabpane">
+      <div class="card status">
+        <div><span class="lbl">Phase</span><b id="st-phase">Waiting for the big screen…</b></div>
+        <div><span class="lbl">Players</span><b id="st-players">–</b></div>
+        <div><span class="lbl">Answered</span><b id="st-answered">–</b></div>
+        <div><span class="lbl">Time left</span><b id="st-left">–</b></div>
+      </div>
+      <div class="hint" id="no-host">Open the big screen (home page) with PIN <b id="hint-pin">—</b>. This panel connects automatically.</div>
+
+      <div class="card question" id="qcard">
+        <div class="qhead"><span class="qno" id="q-no">Q–</span><span id="q-text" class="qtext">No question on screen yet.</span></div>
+        <div class="opts" id="q-opts"></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn big" id="c-main" disabled>▶ Start game</button>
+        <button class="btn ghost" id="c-skip" disabled>⏭ Skip</button>
+        <button class="btn ghost" id="c-restart" disabled>⟲ Restart</button>
+        <button class="btn ghost danger" id="c-exit" disabled>✕ Exit to lobby</button>
+        <button class="btn ghost" id="c-reload" disabled>↻ Load latest quiz</button>
+      </div>
+
+      <div class="card">
+        <h4>🏆 Leaderboard</h4>
+        <ol class="lb" id="top"><li class="muted">—</li></ol>
+      </div>
+      <details class="card">
+        <summary>👻 Players (<span id="pl-n">0</span>) — tap ✕ to remove</summary>
+        <div class="plist" id="plist"></div>
+      </details>
+      <div class="quizv" id="quizv"></div>
+    </section>
+
+    <!-- EDIT -->
+    <section id="tab-edit" class="tabpane hidden">
+      <div class="card info">
+        <div id="ed-info">Loading the latest quiz…</div>
+        <div class="muted small">Type the <b class="ok">correct answer</b> in the green box and 3 <b class="bad">wrong answers</b> below it. The answers are shuffled every game, so the correct one lands on a random tile.</div>
+      </div>
+      <div id="ed-list"></div>
+      <button class="btn ghost add" id="ed-add">＋ Add question</button>
+      <div class="savebar">
+        <span id="ed-status" class="muted">No changes</span>
+        <button class="btn" id="ed-save">💾 Save</button>
+      </div>
+    </section>
+  </div>
+  <div class="toast hidden" id="toast"></div>
+
+  <script type="module" src="js/control.js"></script>
+</body>
+</html>

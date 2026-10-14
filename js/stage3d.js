@@ -469,7 +469,7 @@ export class Stage {
     } else if (inHall && !this.camLocked) {
       const m = this.mascot.pos;
       const o = this.camOverride;
-      const tp = o ? o.pos.clone().add(HALL_ORIGIN) : V(m.x + 0.55, 1.75, m.z + 2.7).add(HALL_ORIGIN);
+      const tp = o ? o.pos.clone().add(HALL_ORIGIN) : V(m.x * 0.5 + 0.2, 1.75, m.z + 2.7).add(HALL_ORIGIN);
       const tl = o ? o.look.clone().add(HALL_ORIGIN) : V(m.x - 0.12, 1.25, m.z - 2.2).add(HALL_ORIGIN).add(this.lookBias || V());
       const k = 1 - Math.pow(0.02, dt);
       this.camPos.lerp(tp, k); this.camLook.lerp(tl, k);
@@ -496,11 +496,12 @@ export class Stage {
     }
     // mascot
     const M = this.mascot;
-    const bob = M.fallen ? 0 : Math.sin(this.t * 2.6) * 0.07;
-    const sh = 0.012 + M.shiver * 0.05;
+    // calm float; a short smooth tremble only right after a scare (decays by itself)
+    M.shiver = Math.max(0, M.shiver - dt * 0.9);
+    const bob = M.fallen ? 0 : (M.walking ? Math.abs(Math.sin(this.t * 6)) * 0.06 : Math.sin(this.t * 2.4) * 0.06);
     M.root.position.copy(M.pos).add(V(0, bob + M.hop, 0));
-    M.body.position.set((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh * 0.6, 0);
-    M.sprite.material.rotation = M.tilt + M.spin + (M.fallen ? 0 : Math.sin(this.t * 1.7) * 0.06) + (Math.random() - 0.5) * M.shiver * 0.12;
+    M.body.position.set(Math.sin(this.t * 36) * M.shiver * 0.018, 0, 0);
+    M.sprite.material.rotation = M.tilt + M.spin + (M.fallen ? 0 : Math.sin(this.t * (M.walking ? 6 : 1.7)) * (M.walking ? 0.07 : 0.05)) + Math.sin(this.t * 29) * M.shiver * 0.04;
     const sq = M.squash;
     M.sprite.scale.set(MASCOT.size * (1 + sq), MASCOT.size * (1 - sq), 1);
     M.sprite.material.color.setRGB(1, 1 - M.red * 0.6, 1 - M.red * 0.6);
@@ -652,12 +653,11 @@ export class Stage {
     const m0 = M.pos.clone();
     await this.tween(2.2, (k) => { M.pos.lerpVectors(m0, this.entrance, k); this.camPos.lerpVectors(c0, c1, k); }, 'inOut');
     if (my !== this.seq) return;
-    M.shiver = 1;
+    this.startle();
     this.mascotSay('G-gulp… 😰', 1.6);
     this.flicker = 0.5; cb.onFlicker && cb.onFlicker();
     await this.wait(1.2);
     this.setMode('hall');
-    M.shiver = 0.35;
   }
 
   skipIntro() {
@@ -673,7 +673,7 @@ export class Stage {
     this.killTweens();
     this.clearBubbles();
     const M = this.mascot;
-    Object.assign(M, { shiver: 0.35, spin: 0, tilt: 0, squash: 0, hop: 0, red: 0, fallen: 0 });
+    Object.assign(M, { shiver: 0, spin: 0, tilt: 0, squash: 0, hop: 0, red: 0, fallen: 0, walking: false });
     M.pos.y = 1.3;
     this.ghost.root.visible = false;
     this.ghost.root.scale.setScalar(1);
@@ -708,16 +708,15 @@ export class Stage {
     const M = this.mascot;
     const from = M.pos.clone(), to = V(Math.sin(i * 1.7) * 0.25, 1.3, st.z);
     this._placeLamps(st.z - 1);
-    this.flicker = 0.25;
-    M.shiver = 0.6;
     sfx.whoosh && sfx.whoosh();
-    await this.tween(2.3, (k, raw) => { M.pos.lerpVectors(from, to, k); M.tilt = Math.sin(raw * Math.PI) * -0.15; }, 'inOut');
+    M.walking = true;
+    await this.tween(2.3, (k, raw) => { M.pos.lerpVectors(from, to, k); M.tilt = Math.sin(raw * Math.PI) * -0.08; }, 'inOut');
+    M.walking = false;
     if (my !== this.seq) return;
     M.tilt = 0;
     await this._event(st, my, sfx);
     if (my !== this.seq) return;
     this.lookBias = null;
-    M.shiver = 0.45;
   }
 
   /** jump straight to station i (skip button / host refresh) */
@@ -739,7 +738,7 @@ export class Stage {
         sfx.creak && sfx.creak();
         p.eyes.userData.glow.visible = true;
         await this.tween(1.1, (k, raw) => { p.pivot.rotation.x = Math.sin(raw * Math.PI * 3) * (1 - raw) * 0.35 + 0.22 * raw * p.dir; }, 'linear');
-        M.shiver = 1;
+        this.startle();
         this.mascotSay('Did… did she just look at me?! 😨', 1.8);
         await this.wait(1.0);
         p.eyes.userData.glow.visible = false;
@@ -750,7 +749,7 @@ export class Stage {
       const d = this._nearest(this.props.doors, st.z, 3, 1.5);
       if (d) {
         this.lookBias = V(d.x * 0.45, 0.1, (d.z - st.z) * 0.6 + 0.8);
-        M.shiver = 1;
+        this.startle();
         for (let n = 0; n < 3; n++) {
           sfx.knock && sfx.knock();
           await this.tween(0.32, (k, raw) => { d.pivot.rotation.y = Math.sin(raw * Math.PI) * 0.12; }, 'linear');
@@ -768,7 +767,7 @@ export class Stage {
         sfx.bell && sfx.bell();
         await this.tween(1.3, (k, raw) => { c.obj.position.x = c.base.x + Math.sin(raw * 60) * 4 * (1 - raw); }, 'linear');
         c.obj.position.copy(c.base);
-        M.shiver = 1;
+        this.startle();
         this.mascotSay('Midnight already?! 🕛', 1.6);
         await this.wait(0.8);
         return;
@@ -783,7 +782,7 @@ export class Stage {
       this.endEyes.scale.setScalar(1.6);
       this.endEyes.visible = true;
       this.lookBias = V(0, 0.4, -1.5);
-      M.shiver = 1;
+      this.startle();
       this.mascotSay('I-it’s so dark… 👀', 1.6);
       await this.wait(1.6);
       this.endEyes.visible = false;
@@ -796,11 +795,18 @@ export class Stage {
     // default: flickering lamps
     sfx.buzz && sfx.buzz();
     this.flicker = 1.3;
-    M.shiver = 1;
+    this.startle();
     this.mascotSay('Eek! The lights! 😨', 1.6);
     const vase = this._nearest(this.props.vases, st.z, 2.5, 1.5);
     if (vase) this.tween(1.2, (k, raw) => { vase.pivot.rotation.z = Math.sin(raw * 30) * 0.12 * (1 - raw); }, 'linear');
     await this.wait(1.6);
+  }
+
+  /** one quick jump + a short tremble that fades out */
+  startle() {
+    const M = this.mascot;
+    M.shiver = 0.8;
+    this.tween(0.45, (k, raw) => { M.hop = Math.sin(raw * Math.PI) * 0.18; M.squash = Math.sin(raw * Math.PI * 2) * 0.06; }, 'linear').then(() => { M.hop = 0; M.squash = 0; });
   }
 
   // where does the ghost come from at this station?
@@ -886,7 +892,7 @@ export class Stage {
     this._frameGag(st, sp);
     await this._ghostAppear(sp, my, sfx);
     if (my !== this.seq) return;
-    M.shiver = 1;
+    this.startle();
     this.mascotSay('EEK!!', 1.0, 'shout');
     // lunge
     const a = G.position.clone();
@@ -942,7 +948,7 @@ export class Stage {
     this.mascotSay('Phew! Correct! ✨', 2, 'good');
     M.shiver = 0;
     await this.tween(1.6, (k, raw) => { M.hop = Math.abs(Math.sin(raw * Math.PI * 3)) * 0.25; M.squash = Math.sin(raw * Math.PI * 6) * 0.08; M.spin = raw < 0.4 ? raw / 0.4 * Math.PI * 2 : 0; }, 'linear');
-    M.hop = 0; M.squash = 0; M.spin = 0; M.shiver = 0.3;
+    M.hop = 0; M.squash = 0; M.spin = 0;
   }
 
   /** WRONG majority: the ghost gets its revenge */
@@ -970,7 +976,7 @@ export class Stage {
     if (my !== this.seq) return;
     // mascot freaks out: jump, spin, faint
     sfx.wrong && sfx.wrong();
-    M.shiver = 1.4;
+    M.shiver = 0.6;
     await this.tween(0.9, (k, raw) => { M.hop = Math.sin(raw * Math.PI) * 0.55; M.spin = raw * Math.PI * 4; M.red = Math.abs(Math.sin(raw * 20)); }, 'out');
     if (my !== this.seq) return;
     M.spin = 0; M.red = 0;
@@ -992,7 +998,7 @@ export class Stage {
     // get back up, still shaking
     this.fx.dizzy.visible = false;
     await this.tween(0.5, (k) => { M.pos.y = lerp(0.38, 1.3, k); M.tilt = 1.45 * (1 - k); M.fallen = 1 - k; }, 'out');
-    M.shiver = 1;
+    M.shiver = 0.5;
   }
 
   celebrateLoop() { this.resetActors(); }

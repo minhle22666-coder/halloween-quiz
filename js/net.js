@@ -7,9 +7,10 @@
 // ============================================================
 import { CONFIG } from './config.js';
 
-export const isLocalMode = () => !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY;
+// ?local in the URL forces the same-browser demo mode (handy for offline rehearsals)
+export const isLocalMode = () => !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY || new URLSearchParams(location.search).has('local');
 
-function supa() {
+export function supa() {
   if (!window.supabase) throw new Error('supabase lib missing');
   if (!supa._c) {
     supa._c = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
@@ -100,4 +101,28 @@ export function createPlayerNet(room, { onHostMsg, onStatus }) {
   }
   subscribeSupabase('room:' + room, onHostMsg, onStatus);
   return { mode: 'supabase', send: (p) => restBroadcast('hq:' + room, p) };
+}
+
+// ---------- Game-master (controller) side ----------
+// host -> controllers: ctl:<room>   (only controllers listen, so the correct answer never reaches players)
+// controllers -> host: REST into hq:<room> with { t: 'ctl', cmd, code }
+export function createControllerNet(room, { onState, onStatus }) {
+  if (isLocalMode()) {
+    const inbox = new BroadcastChannel('ctl:' + room);
+    const outbox = new BroadcastChannel('hq:' + room);
+    inbox.onmessage = (e) => onState(e.data);
+    setTimeout(() => onStatus && onStatus('SUBSCRIBED'), 0);
+    return { mode: 'local', send: async (p) => { outbox.postMessage(p); return true; } };
+  }
+  subscribeSupabase('ctl:' + room, onState, onStatus);
+  return { mode: 'supabase', send: (p) => restBroadcast('hq:' + room, p) };
+}
+
+export function createHostCtlOut(room) {
+  if (isLocalMode()) {
+    const out = new BroadcastChannel('ctl:' + room);
+    return { send: (p) => out.postMessage(p) };
+  }
+  const ch = subscribeSupabase('ctl:' + room, () => {}, null);
+  return { send: (p) => { if (ch.state === 'joined') ch.send({ type: 'broadcast', event: 'm', payload: p }); } };
 }
