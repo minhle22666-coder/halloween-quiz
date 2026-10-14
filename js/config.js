@@ -6,8 +6,8 @@
 export const CONFIG = {
   // ---- Supabase Realtime (see README.md → "1. Supabase") ----
   // Leave empty to run in LOCAL DEMO mode (host + players as tabs in one browser).
-  SUPABASE_URL: '',        // e.g. 'https://abcdxyz.supabase.co'
-  SUPABASE_ANON_KEY: '',   // Publishable key (sb_publishable_...) or legacy anon key (eyJ...) — safe to publish
+  SUPABASE_URL: 'https://elierbdgpqqjxgngvxqo.supabase.co',        
+  SUPABASE_ANON_KEY: 'sb_publishable_UMrty-swTbaZJhfTEXUqpg_SUxfq_hb',   // Publishable key (sb_publishable_...) or legacy anon key (eyJ...) — safe to publish
 
   // ---- Game timing (seconds) ----
   QUESTION_TIME: 20,       // time to answer each question
