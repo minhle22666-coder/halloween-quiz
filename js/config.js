@@ -6,12 +6,12 @@
 export const CONFIG = {
   // ---- Supabase Realtime (see README.md → "1. Supabase") ----
   // Leave empty to run in LOCAL DEMO mode (host + players as tabs in one browser).
-  SUPABASE_URL: 'https://elierbdgpqqjxgngvxqo.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_UMrty-swTbaZJhfTEXUqpg_SUxfq_hb',   // Publishable key (sb_publishable_...) or legacy anon key (eyJ...) — safe to publish
+  SUPABASE_URL: '',        // e.g. 'https://abcdxyz.supabase.co'
+  SUPABASE_ANON_KEY: '',   // Publishable key (sb_publishable_...) or legacy anon key (eyJ...) — safe to publish
 
   // ---- Game timing (seconds) ----
   QUESTION_TIME: 20,       // time to answer each question
-  QUESTION_PREVIEW: 4,     // question shown alone before answers open
+  QUESTION_PREVIEW: 3,     // question card shown alone before the answers open
   MAX_POINTS: 1000,        // a perfect (instant) correct answer
   AUTO_ADVANCE: false,     // true = move on automatically after the scoreboard
   AUTO_ADVANCE_DELAY: 8,
@@ -19,6 +19,12 @@ export const CONFIG = {
   // How many fake players to add when the host opens host.html?bots=N
   // (handy for rehearsing with a full room). 0 = none.
   DEFAULT_BOTS: 0,
+};
+
+// ---- Mascot (placeholder = a floating 2D sprite; a 3D model can replace it later) ----
+export const MASCOT = {
+  sprite: 'assets/avatars/witch.webp',
+  size: 0.85, // metres
 };
 
 // Kahoot-style answer tiles (shape + colour)

@@ -148,3 +148,19 @@ export function toggleMute() {
   if (master) master.gain.value = muted ? 0 : 0.9;
   return muted;
 }
+
+// --- hallway sounds ---
+export const whoosh = () => {
+  if (!ctx) return;
+  const s = ctx.createBufferSource(); s.buffer = noiseBuffer(1.2);
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(300, now()); bp.frequency.exponentialRampToValueAtTime(1600, now() + 0.6); bp.frequency.exponentialRampToValueAtTime(400, now() + 1.1);
+  const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, now()); g.gain.exponentialRampToValueAtTime(0.35, now() + 0.4); g.gain.exponentialRampToValueAtTime(0.0001, now() + 1.15);
+  s.connect(bp).connect(g).connect(master); s.start();
+};
+export const knock = () => { tone(120, 0.12, { type: 'square', vol: 0.35, glide: 70 }); tone(2400, 0.03, { type: 'square', vol: 0.05 }); };
+export const slam = () => { tone(70, 0.4, { type: 'sine', vol: 0.8, glide: 35 }); tone(180, 0.15, { type: 'square', vol: 0.15, glide: 60 }); };
+export const bell = () => { [0, 0.55].forEach((at) => { tone(392, 1.6, { vol: 0.25, at }); tone(784, 1.0, { vol: 0.08, at }); tone(1176, 0.6, { vol: 0.04, at }); }); };
+export const buzz = () => { for (let i = 0; i < 6; i++) tone(110 + Math.random() * 30, 0.06, { type: 'sawtooth', vol: 0.07, at: i * 0.09 + Math.random() * 0.04 }); };
+export const zap = () => { tone(1800, 0.35, { type: 'sawtooth', vol: 0.1, glide: 300 }); tone(600, 0.5, { type: 'sine', vol: 0.15, glide: 1800 }); };
+export const bonk = () => { tone(520, 0.18, { type: 'triangle', vol: 0.35, glide: 180 }); };

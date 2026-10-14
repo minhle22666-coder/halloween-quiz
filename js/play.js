@@ -1,7 +1,7 @@
 // ============================================================
 //  PLAYER (phone) — lightweight, no 3D
 // ============================================================
-import { AVATARS, ANSWER_STYLES } from './config.js';
+import { AVATARS, ANSWER_STYLES, CONFIG } from './config.js';
 import { createPlayerNet } from './net.js';
 import { SHAPES, el, avatarEl, ordinal } from './ui.js';
 
@@ -110,6 +110,7 @@ function onHostMsg(m) {
   switch (m.t) {
     case 'hb': return onHeartbeat(m);
     case 'intro': return joined && show('intro');
+    case 'walk': return joined && showWalk(m);
     case 'pre': return joined && showPre(m);
     case 'open': return joined && openAnswer(m, m.dur * 1000);
     case 'reveal': return joined && showResult(m.res && m.res[pid], m.q);
@@ -129,6 +130,7 @@ function onHeartbeat(m) {
   // resync if we missed something (refresh / flaky wifi)
   if (m.ph === 'lobby' && view !== 'wait') show('wait');
   else if (m.ph === 'intro' && view !== 'intro') show('intro');
+  else if (m.ph === 'walk' && view !== 'walk') showWalk({ i: m.q, total: m.total });
   else if (m.ph === 'pre' && m.qd && (view !== 'pre' || Q.i !== m.qd.i)) showPre({ ...m.qd, total: m.total });
   else if (m.ph === 'open' && m.qd && Q.answered !== m.qd.i && (view !== 'answer' || Q.i !== m.qd.i)) openAnswer({ ...m.qd, total: m.total }, m.rem);
   else if ((m.ph === 'reveal' || m.ph === 'board') && m.res && lastResultQ !== m.q) showResult(m.res[pid], m.q);
@@ -136,6 +138,12 @@ function onHeartbeat(m) {
 }
 
 // ---------------- question ----------------
+function showWalk(m) {
+  Q.total = m.total || Q.total;
+  $('walk-num').textContent = `Question ${m.i + 1} of ${Q.total}`;
+  show('walk');
+}
+
 function showPre(m) {
   Q.i = m.i; Q.total = m.total || Q.total;
   $('pre-num').textContent = `Question ${m.i + 1} of ${Q.total}`;
@@ -143,7 +151,7 @@ function showPre(m) {
   show('pre');
   const bar = $('pre-bar');
   bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)'; void bar.offsetWidth;
-  bar.style.transition = 'transform 4s linear'; bar.style.transform = 'scaleX(0)';
+  bar.style.transition = `transform ${CONFIG.QUESTION_PREVIEW}s linear`; bar.style.transform = 'scaleX(0)';
 }
 
 function openAnswer(m, remainingMs) {
@@ -220,10 +228,8 @@ function showResult(res, q) {
   $('behind').textContent = rank === 1 ? "You're leading the coven! 👑" : behind === 0 ? `Tied with ${ahead}` : `${behind.toLocaleString('en-US')} pts behind ${ahead}`;
   const skit = $('skit');
   if (good) {
-    skit.className = 'skit ' + (q % 2 ? 'door' : 'slip');
-    skit.innerHTML = q % 2
-      ? '<span class="wiz">🧙</span><span class="doorx">🚪</span><span class="ghost">👻</span>'
-      : '<span class="ghost">👻</span><span class="nana">🍌</span><span class="wiz">🧙</span><span class="stars">💫</span>';
+    skit.className = 'skit block';
+    skit.innerHTML = '<span class="ghost">👻</span><span class="shield"></span><span class="wiz">🧙</span><span class="spark">✨</span>';
   } else {
     skit.className = 'skit scare';
     skit.innerHTML = '<span class="wiz">🧙</span><span class="soul">🧙</span><span class="hat">🎩</span><span class="ghost">👻</span>';
@@ -256,6 +262,14 @@ function showFinal(m) {
 
 // ---------------- boot ----------------
 buildJoin();
+$('btn-leave').onclick = () => {
+  if (!confirm('Leave the game? Your score will be lost.')) return;
+  if (net) net.send({ t: 'leave', id: pid });
+  joined = false;
+  sess.del('hq-joined');
+  setScore(0); Q.answered = -1; lastResultQ = -1;
+  show('join');
+};
 $('btn-rejoin').onclick = () => { sess.del('hq-joined'); sess.del('hq-pid'); location.reload(); };
 if (room && sess.get('hq-joined') === room && me.name) {
   // quick rejoin after a refresh

@@ -5,9 +5,9 @@ Chạy hoàn toàn tĩnh (deploy **Vercel** hoặc GitHub Pages, không cần bu
 
 | Trang | Ai dùng | Nội dung |
 |---|---|---|
-| `host.html` | Người dẫn (máy chiếu) | QR + mã PIN, sảnh chờ, cảnh mở cửa lâu đài, câu hỏi, mascot, bảng xếp hạng, podium |
-| `play.html?room=PIN` | Người chơi (điện thoại) | Nhập tên + chọn avatar, bấm đáp án, xem đúng/sai + hạng của mình |
-| `index.html` | Ai cũng được | Trang nhập PIN / link sang host |
+| `/` (`index.html`) | Người dẫn (máy chiếu) | Vào là thấy ngay 3D + QR + mã PIN, sảnh chờ, intro lâu đài → hành lang ma, câu hỏi, mascot, bảng xếp hạng, podium |
+| `play.html?room=PIN` | Người chơi (điện thoại) | Nhập tên + chọn avatar, bấm đáp án, xem đúng/sai + hạng của mình, nút Leave |
+| `host.html` | — | Link cũ, tự chuyển về `index.html` |
 
 ---
 
@@ -61,43 +61,52 @@ git push -u origin main
 5. Từ giờ mỗi lần push lên GitHub (hoặc sửa file trực tiếp trên GitHub), Vercel tự deploy lại sau ~30 giây.
 
 Link dùng:
-- Màn hình chiếu: `https://<tên>.vercel.app/host.html`
+- Màn hình chiếu: `https://<tên>.vercel.app` (trang chủ chính là màn hình host)
 - Người chơi: quét QR trên màn hình host (tự trỏ tới `play.html?room=<PIN>`), hoặc vào `https://<tên>.vercel.app` rồi nhập PIN.
 
 (Vẫn dùng được GitHub Pages: Settings → Pages → Deploy from branch `main` / root — repo phải Public.)
 
 ### 2c. Checklist trước giờ chơi
 - [ ] Supabase project đang **Active** (không Paused).
-- [ ] Mở `host.html` trên máy chiếu, **không** thấy dòng cảnh báo "LOCAL DEMO mode".
+- [ ] Mở trang chủ trên máy chiếu, **không** thấy dòng cảnh báo "LOCAL DEMO mode".
 - [ ] Dùng 2 điện thoại (4G + wifi) quét thử QR, vào sảnh thấy tên hiện trên màn hình.
 - [ ] Bấm **⛶** fullscreen, click 1 lần để bật âm thanh, chỉnh loa.
-- [ ] Muốn tập dượt đông người: `host.html?bots=70`.
+- [ ] Muốn tập dượt đông người: `/?bots=70`.
 
 ## 3. Cách chơi (host)
 
-1. Mở `host.html` trên máy nối máy chiếu → bấm **⛶** (hoặc phím `F`) để fullscreen. Click 1 lần vào trang để bật âm thanh.
-2. Người chơi quét QR → nhập tên → chọn avatar → vào sảnh. Click vào một người trên sảnh để kick.
-3. Bấm **Start the game** → camera bay tới lâu đài, sấm chớp + tiếng cười, cổng lâu đài mở, đi xuyên hành lang ma (~18 giây, bấm Skip để bỏ qua).
-4. Mỗi câu: hiện câu hỏi 4 giây → mở 4 đáp án + đếm ngược 20 giây (hết giờ hoặc mọi người đã trả lời thì tự chốt).
-5. Chốt: đáp án đúng sáng lên, số người chọn từng đáp án, mascot diễn hài:
-   - Đa số **đúng** → con ma trượt vỏ chuối 🍌 hoặc bị kẹt cửa 🚪 (luân phiên), phù thủy không hề thấy.
-   - Đa số **sai** → con ma hù "BOO!", phù thủy hồn lìa khỏi xác, rớt mũ phép.
-6. **Next / Space** → Scoreboard (top 5, điểm cộng câu đó + thời gian trả lời, người trả lời nhanh nhất).
-7. Sau câu 5 → **podium Top 3** + tổng điểm, bảng hạng 4–12. Mỗi điện thoại hiện hạng của chính mình.
+1. Mở trang chủ trên máy nối máy chiếu → QR + PIN hiện ngay, cảnh 3D tải sau vài giây. Bấm **⛶** (phím `F`) để fullscreen, click 1 lần để bật âm thanh.
+   (Mở trang chủ bằng điện thoại sẽ thấy màn "Join the game" để vào chơi; muốn làm host trên máy nhỏ thì bấm "I'm the host" hoặc thêm `?host` vào link.)
+2. Người chơi quét QR → nhập tên → chọn avatar → vào sảnh. Click vào tên trên sảnh để kick.
+3. **Start the game** → camera bay tới lâu đài, sấm chớp + tiếng cười → cổng lâu đài mở → mascot run rẩy bay vào **hành lang ma**.
+4. Mỗi câu hỏi:
+   - **Đi sâu vào hành lang (~4 giây)**: mascot bay tới điểm dừng tiếp theo + 1 sự kiện ma ám: đèn chập chờn / bức tranh lệch và mắt người phụ nữ dõi theo / cánh cửa rung có tiếng gõ / đồng hồ quả lắc rung chuông / mất điện thấy đôi mắt đỏ trong bóng tối.
+   - **Khung câu hỏi** hiện ra (3 giây) → **4 đáp án** + đếm ngược 20 giây (hết giờ hoặc mọi người đã trả lời thì tự chốt).
+   - **Chốt**: đáp án đúng sáng lên + số người chọn từng đáp án, rồi:
+     - Đa số **đúng** → con ma lao ra (từ cánh cửa / bức tranh / xuyên tường) nhưng bị **thế lực bí ẩn chặn lại**: khiên phép thuật "BONK!" hoặc vòng xoáy hút ngược con ma.
+     - Đa số **sai** → con ma **trả đũa**: tắt đèn, "BOO!!", mascot xoay vòng ngã lăn ra choáng váng.
+5. **Next / Space** → Scoreboard (top 5, điểm cộng câu đó + thời gian trả lời, người nhanh nhất) → câu tiếp theo.
+6. Sau câu cuối → **podium Top 3** + tổng điểm, bảng hạng 4–12. Mỗi điện thoại hiện hạng của chính mình.
 
-Phím tắt host: `Space`/`Enter`/`→` = Next · `F` = fullscreen · `M` = tắt tiếng.
+**Nút điều khiển (góc dưới trái, khi đang chơi):**
+- **⟲ Restart** — chơi lại từ đầu (intro + câu 1) với cùng người chơi, điểm về 0.
+- **✕ Exit** — thoát về sảnh chờ (người chơi vẫn ở trong phòng, điểm về 0).
+- Màn podium: **Play again ↺** = chơi lại từ đầu.
+- Điện thoại: nút **✕ Leave** ở góc trên để rời game.
+
+Phím tắt host: `Space`/`Enter`/`→` = Next (hoặc Skip) · `F` = fullscreen · `M` = tắt tiếng.
 
 **Tính điểm (giống Kahoot):** đúng = `1000 × (1 − thời_gian/20/2)` → trả lời ngay ≈ 1000, sát giờ ≈ 500; sai/không trả lời = 0.
 
 ### Tập dượt với người chơi giả
-`host.html?bots=70` → thêm 70 người chơi ảo tự trả lời, để test giao diện & hiệu năng khi đông người.
+`/?bots=70` (hoặc `index.html?bots=70`) → thêm 70 người chơi ảo tự trả lời, để test giao diện & hiệu năng khi đông người.
 
 ## 4. Chỉnh sửa
 
 - **Câu hỏi / thời gian / điểm**: `js/config.js` (`QUESTIONS`, `QUESTION_TIME`, `MAX_POINTS`, `AUTO_ADVANCE`).
 - **Avatar**: 14 nhân vật trong `assets/avatars/*.webp` (256px, nền trong suốt). Thêm/bớt: bỏ file vào thư mục rồi sửa danh sách `AVATARS` trong `js/config.js` (id = tên file).
-- **Texture mascot**: `assets/models/texture_0.jpg` (đã nén từ 4096 → 2048px). Xoá file này thì game tự tô màu dự phòng.
-- **Hành lang ma** (`haunted_diorama.glb`, đã nén texture 18 MB → 3.6 MB): đoạn giữa của intro — cổng lâu đài mở → camera đi dọc hành lang, đèn chập chờn, cửa bật mở thấy đôi mắt đỏ → trắng xoá → vào sân khấu câu hỏi.
+- **Mascot**: tạm thời là hình phù thủy 2D bay lơ lửng (`MASCOT` trong `js/config.js`). Khi có mascot 3D mới sẽ thay vào + làm animation riêng.
+- **Hành lang ma**: `assets/models/hallway.glb` (Diorama Haunted Hallway, đã nén 8 MB → 2.2 MB). Game ghép nhiều đoạn hành lang hai bên tường thành 1 hành lang dài nhiều cửa; mỗi câu hỏi là 1 điểm dừng (`stations`, tự sinh theo số câu hỏi).
 
 ## 5. Kiến trúc & hiệu năng (50–80 người)
 
@@ -111,11 +120,11 @@ Phím tắt host: `Space`/`Enter`/`→` = Next · `F` = fullscreen · `M` = tắ
 ## Cấu trúc
 
 ```
-index.html  host.html  play.html
+index.html (host)  play.html  host.html (redirect)
 css/        common.css host.css play.css
 js/         config.js  net.js  host.js  play.js  stage3d.js  sfx.js  ui.js
 lib/        three.js (vendored r169), supabase-js UMD, qrcode-generator
-assets/     models/ (halloween, haunted_diorama, door, ghost, banana .glb + wizard.fbx + texture_0.jpg)
+assets/     models/ (halloween = nhà ma ngoài trời, hallway = hành lang, door = cổng lâu đài, ghost)
             audio/evil-laugh.mp3 · img/ (moon, bats, bushes, pumpkin) · avatars/*.webp
 vercel.json (cache cho assets)
 ```

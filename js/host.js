@@ -28,6 +28,7 @@ const S = {
   openedAt: 0,
   lastRanks: new Map(),
   gagToggle: 0,
+  run: 0,                  // bumps on exit/restart to cancel running sequences
 };
 
 let stage = null;
@@ -62,6 +63,7 @@ function onPlayerMsg(m) {
   if (!m || !m.id) return;
   if (m.t === 'join') handleJoin(m);
   else if (m.t === 'ans') handleAnswer(m);
+  else if (m.t === 'leave') removePlayer(m.id, false);
 }
 
 function handleJoin(m) {
@@ -162,11 +164,12 @@ function densify() {
   playersBox.classList.toggle('dense', n > 24 && n <= 48);
   playersBox.classList.toggle('xdense', n > 48);
 }
-function kick(id) {
+function kick(id) { removePlayer(id, true); }
+function removePlayer(id, isKick) {
   const p = S.players.get(id);
   if (!p) return;
   S.players.delete(id);
-  S.kicked.add(id);
+  if (isKick) S.kicked.add(id);
   const c = chips.get(id);
   if (c) { c.remove(); chips.delete(id); }
   densify(); updateCount(); scheduleHeartbeat(50); save();
@@ -183,8 +186,9 @@ function updateCount() {
 }
 
 function buildQR() {
-  const base = location.href.replace(/host\.html.*$/, '');
-  const url = base + 'play.html?room=' + room;
+  const u = new URL('play.html', location.href);
+  u.search = '?room=' + room;
+  const url = u.toString();
   const qr = qrcode(0, 'H');
   qr.addData(url);
   qr.make();
@@ -202,44 +206,66 @@ const nextBtn = $('btn-next');
 function setNext(label, visible = true) { nextBtn.textContent = label; nextBtn.classList.toggle('hidden', !visible); }
 
 // ============================================================ flow
-async function startGame() {
+const FX = {
+  whoosh: sfx.whoosh, creak: sfx.doorCreak, knock: sfx.knock, bell: sfx.bell, buzz: sfx.buzz, slam: sfx.slam,
+  zap: sfx.zap, bonk: sfx.bonk, boo: sfx.boo, wrong: sfx.wrong, thud: sfx.thud, sparkle: sfx.sparkle,
+};
+
+async function startGame(skipConfirm = false) {
   sfx.audioUnlock();
-  if (!S.players.size && !confirm('No players have joined yet. Start anyway?')) return;
+  if (!skipConfirm && !S.players.size && !confirm('No players have joined yet. Start anyway?')) return;
+  stopBots();
   S.phase = 'intro';
   S.qi = -1;
+  const run = ++S.run;
   show('scr-intro');
   setNext('Skip ⏭');
+  setGameButtons(true);
   send({ t: 'intro' });
   scheduleHeartbeat(100);
   sfx.ambientStop();
-  // restart the intro title animation
   const t = document.querySelector('.intro-title'); t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
   await stage.playIntro({
     onThunder: (k) => sfx.thunder(k),
     onLaugh: () => sfx.laugh(6),
     onDoor: () => sfx.doorCreak(),
+    onFlicker: () => sfx.buzz(),
   });
-  if (S.phase === 'intro') nextQuestion();
+  if (S.phase === 'intro' && S.run === run) nextQuestion();
 }
 
-function nextQuestion() {
+// 1) the mascot floats to the next spot in the hallway (spooky event)
+async function nextQuestion() {
   S.qi++;
   if (S.qi >= QUESTIONS.length) return showFinal();
-  stage.setMode('quiz');
-  stage.resetActors();
   S.answers.clear();
-  S.phase = 'pre';
-  const q = QUESTIONS[S.qi];
+  S.phase = 'walk';
+  const my = S.qi, run = S.run;
   const scr = $('scr-question');
-  scr.classList.remove('reveal'); scr.classList.add('pre');
+  scr.classList.remove('reveal', 'pre'); scr.classList.add('walk');
+  $('walk-num').textContent = `Question ${S.qi + 1} of ${QUESTIONS.length}`;
   $('q-num').innerHTML = `${S.qi + 1}<small>of ${QUESTIONS.length}</small>`;
-  $('q-text').textContent = q.text;
   $('tiles').innerHTML = '';
   $('ans-count').textContent = '0';
   show('scr-question');
   setNext('Skip ⏭');
-  sfx.gong();
   sfx.ambientStart();
+  send({ t: 'walk', i: S.qi, total: QUESTIONS.length });
+  scheduleHeartbeat(500);
+  await stage.walkTo(S.qi, FX);
+  if (S.phase === 'walk' && S.qi === my && S.run === run) showPre();
+}
+
+// 2) the question card appears
+function showPre() {
+  S.phase = 'pre';
+  const q = QUESTIONS[S.qi];
+  const scr = $('scr-question');
+  scr.classList.remove('walk', 'reveal'); scr.classList.add('pre');
+  const qt = $('q-text');
+  qt.textContent = q.text;
+  qt.classList.remove('pop'); void qt.offsetWidth; qt.classList.add('pop');
+  sfx.gong();
   send({ t: 'pre', ...qPayload(), total: QUESTIONS.length });
   scheduleHeartbeat(500);
   const bar = $('pre-bar');
@@ -247,8 +273,8 @@ function nextQuestion() {
   void bar.offsetWidth;
   bar.style.transition = `transform ${CONFIG.QUESTION_PREVIEW}s linear`;
   bar.style.transform = 'scaleX(0)';
-  const my = S.qi;
-  setTimeout(() => { if (S.phase === 'pre' && S.qi === my) openQuestion(); }, CONFIG.QUESTION_PREVIEW * 1000);
+  const my = S.qi, run = S.run;
+  setTimeout(() => { if (S.phase === 'pre' && S.qi === my && S.run === run) openQuestion(); }, CONFIG.QUESTION_PREVIEW * 1000);
 }
 
 function openQuestion() {
@@ -343,12 +369,12 @@ function closeQuestion() {
   save();
   setNext('Scoreboard ▶');
   // mascot gag
-  const fx = { slip: sfx.slip, thud: sfx.thud, sparkle: sfx.sparkle, creak: sfx.doorCreak, squeak: sfx.squeak, boo: sfx.boo, wrong: sfx.wrong };
+  // mascot scene: correct → a mysterious force stops the ghost; wrong → the ghost takes revenge
   if (good) {
     sfx.correct();
-    (S.gagToggle++ % 2 === 0 ? stage.gagBanana(fx) : stage.gagDoor(fx));
+    stage.gagBlocked(S.qi, S.gagToggle++, FX);
   } else {
-    stage.gagScare(fx);
+    stage.gagRetaliate(S.qi, FX);
   }
   if (CONFIG.AUTO_ADVANCE) autoAdvance(9);
 }
@@ -392,10 +418,11 @@ function showBoard() {
 async function showFinal() {
   S.phase = 'final';
   save();
+  stage.resetActors();
   stage.setMode('final');
-  stage.celebrateLoop();
   show('scr-final');
   setNext('Play again ↺');
+  setGameButtons(true);
   const list = ranked();
   const pod = $('podium');
   pod.innerHTML = '';
@@ -437,17 +464,50 @@ async function showFinal() {
   rest.classList.toggle('show', list.length > 3);
 }
 
-function playAgain() {
+function resetScores() {
   for (const p of S.players.values()) { p.score = 0; p.streak = 0; p.correct = 0; p.last = null; }
-  S.phase = 'lobby'; S.qi = -1;
+  S.answers.clear();
+  S.lastRanks = new Map();
+}
+function stopEverything() {
+  S.run++;
+  clearTimeout(autoT);
+  cancelAnimationFrame(timerRAF);
+  stopBots();
   stage.resetActors();
+  stage.clearBubbles();
+}
+
+// ✕ Exit: back to the lobby (players stay joined, scores reset)
+function backToLobby(ask = true) {
+  if (ask && S.phase !== 'final' && !confirm('Exit the game and go back to the lobby? Scores will be reset.')) return;
+  stopEverything();
+  resetScores();
+  S.phase = 'lobby'; S.qi = -1;
   stage.setMode('lobby');
   show('scr-lobby');
   renderLobby();
   setNext('', false);
+  setGameButtons(false);
   send({ t: 'reset' });
   scheduleHeartbeat(100);
   save();
+}
+
+// ⟲ Restart: play again from the very beginning (intro + question 1) with the same players
+function restartGame(ask = true) {
+  if (ask && S.phase !== 'final' && !confirm('Restart the game from the beginning? Scores will be reset.')) return;
+  stopEverything();
+  resetScores();
+  send({ t: 'reset' });
+  save();
+  startGame(true);
+}
+function playAgain() { restartGame(false); }
+
+function setGameButtons(on) {
+  $('btn-restart').classList.toggle('hidden', !on);
+  $('btn-exit').classList.toggle('hidden', !on);
 }
 
 let autoT = 0;
@@ -458,7 +518,8 @@ function next() {
   sfx.audioUnlock();
   switch (S.phase) {
     case 'lobby': return startGame();
-    case 'intro': stage.skipIntro(); return nextQuestion();
+    case 'intro': S.run++; stage.skipIntro(); S.phase = 'board'; return nextQuestion();
+    case 'walk': S.run++; stage.skipWalk(S.qi); return showPre();
     case 'pre': return openQuestion();
     case 'open': return closeQuestion();
     case 'reveal': return showBoard();
@@ -501,11 +562,13 @@ async function boot() {
   const { Stage } = await import('./stage3d.js');
   stage = new Stage($('stage'));
   window.__stage = stage;
-  await stage.load((k) => { $('loading').querySelector('.bar i').style.width = Math.round(k * 100) + '%'; });
+  $('btn-start').disabled = true;
+  await stage.load((k) => { $('loading').querySelector('.bar i').style.width = Math.round(k * 100) + '%'; }, QUESTIONS.length);
+  $('btn-start').disabled = false;
   $('loading').style.opacity = '0';
   setTimeout(() => $('loading').remove(), 700);
 
-  if (restored && S.phase === 'board') { showBoard(); }
+  if (restored && S.phase === 'board') { stage.setMode('hall'); stage.skipWalk(S.qi); showBoard(); setGameButtons(true); }
   else if (restored && S.phase === 'final') { showFinal(); }
   else { show('scr-lobby'); renderLobby(); }
   heartbeat();
@@ -514,6 +577,8 @@ async function boot() {
   if (bots > 0 && S.phase === 'lobby') addBots(Math.min(bots, 120));
 
   $('btn-start').onclick = () => next();
+  $('btn-restart').onclick = () => restartGame();
+  $('btn-exit').onclick = () => backToLobby();
   nextBtn.onclick = () => next();
   $('btn-full').onclick = toggleFull;
   $('btn-mute').onclick = toggleMute;
@@ -525,13 +590,20 @@ async function boot() {
   });
   // first click anywhere unlocks audio + lobby ambience
   addEventListener('pointerdown', () => { sfx.audioUnlock(); if (S.phase === 'lobby') sfx.ambientStart(); }, { once: true });
-  window.__host = { S, next, addBots };
+  window.__host = { S, next, addBots, restartGame, backToLobby };
 }
 function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
 function toggleMute() { const m = sfx.toggleMute(); $('btn-mute').textContent = m ? '🔇' : '🔊'; }
 
-boot().catch((e) => {
+// phones landing on the big-screen page are almost always players
+const isPhone = matchMedia('(pointer: coarse)').matches && Math.min(innerWidth, innerHeight) < 600;
+if (isPhone && !params.has('host')) {
+  $('phone-gate').classList.remove('hidden');
+  $('pg-host').onclick = () => { $('phone-gate').remove(); startBoot(); };
+} else startBoot();
+
+function startBoot() { boot().catch((e) => {
   console.error(e);
   const l = $('loading');
   if (l) l.querySelector('p').textContent = 'Failed to load: ' + e.message;
-});
+}); }

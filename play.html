@@ -12,7 +12,7 @@
 </head>
 <body>
   <div class="night-bg"><div class="moon"></div><div class="bats"></div><div class="fog"></div><div class="bushes"></div></div>
-  <div class="topbar hidden" id="topbar"><div class="me"><span id="me-av"></span><b id="me-name"></b></div><div class="score" id="me-score">0</div></div>
+  <div class="topbar hidden" id="topbar"><div class="me"><span id="me-av"></span><b id="me-name"></b></div><div class="tb-right"><div class="score" id="me-score">0</div><button class="leave" id="btn-leave" title="Leave the game">✕ Leave</button></div></div>
 
   <!-- JOIN -->
   <main id="v-join" class="view">
@@ -41,6 +41,14 @@
     <div class="bolt">⚡</div>
     <h2 class="title-font">The castle gates are opening…</h2>
     <p class="muted">Look at the big screen!</p>
+  </main>
+
+  <!-- MASCOT WALKING (between questions) -->
+  <main id="v-walk" class="view hidden center">
+    <div class="qbadge" id="walk-num">Question 1 of 5</div>
+    <div class="walker">🧙‍♀️<span>💨</span></div>
+    <h2>Going deeper into the haunted hallway…</h2>
+    <p class="muted">Get ready — look at the big screen!</p>
   </main>
 
   <!-- QUESTION PREVIEW -->
