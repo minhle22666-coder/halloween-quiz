@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d0d3a">
+  <title>Haunted Quiz</title>
+  <link rel="icon" href="assets/img/pumpkin.svg">
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    main { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 24px; text-align: center; }
+    h1 { font-family: var(--title); font-weight: 400; font-size: clamp(56px, 12vw, 120px); color: var(--orange); margin: 0; line-height: .95; text-shadow: 0 0 30px rgba(255, 120, 0, .55), 0 5px 0 #4a1800; letter-spacing: 3px; }
+    p { color: var(--muted); margin: 0; font-size: 18px; }
+    .join { display: flex; gap: 10px; width: min(420px, 100%); }
+    .join input { flex: 1; min-width: 0; font: 700 26px var(--body); letter-spacing: 6px; text-align: center; border-radius: 14px; border: 3px solid transparent; padding: 12px; outline: none; }
+    .join input:focus { border-color: var(--orange); }
+    a.host { color: #c9a8ff; font-weight: 600; text-decoration: none; border-bottom: 1px dashed; }
+  </style>
+</head>
+<body>
+  <div class="night-bg"><div class="moon"></div><div class="bats" style="left:auto;right:6%;filter:none"></div><div class="fog"></div><div class="bushes"></div></div>
+  <main>
+    <h1>Haunted Quiz</h1>
+    <p>Enter the game PIN shown on the big screen</p>
+    <form class="join" onsubmit="event.preventDefault(); const v=this.pin.value.trim(); if(/^\d{6}$/.test(v)) location.href='play.html?room='+v;">
+      <input name="pin" inputmode="numeric" maxlength="6" placeholder="Game PIN" autocomplete="off" required>
+      <button class="btn">Go 👻</button>
+    </form>
+    <a class="host" href="host.html">I'm the host — open the big screen</a>
+  </main>
+</body>
+</html>

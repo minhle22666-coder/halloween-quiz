@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1d0d3a">
+  <title>Haunted Quiz</title>
+  <link rel="icon" href="assets/img/pumpkin.svg">
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/play.css">
+  <script src="lib/supabase.js"></script>
+</head>
+<body>
+  <div class="night-bg"><div class="moon"></div><div class="bats"></div><div class="fog"></div><div class="bushes"></div></div>
+  <div class="topbar hidden" id="topbar"><div class="me"><span id="me-av"></span><b id="me-name"></b></div><div class="score" id="me-score">0</div></div>
+
+  <!-- JOIN -->
+  <main id="v-join" class="view">
+    <h1 class="logo">Haunted Quiz</h1>
+    <div class="card">
+      <label class="pin-row" id="pin-row">Game PIN<input id="in-pin" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="off"></label>
+      <label>Your name<input id="in-name" maxlength="16" placeholder="e.g. Spooky Sam" autocomplete="off" enterkeyhint="go"></label>
+      <div class="lbl">Pick your monster</div>
+      <div class="av-grid" id="av-grid"></div>
+      <button class="btn big" id="btn-join">Enter the castle 👻</button>
+      <div class="err" id="join-err"></div>
+    </div>
+  </main>
+
+  <!-- WAITING ROOM -->
+  <main id="v-wait" class="view hidden center">
+    <div class="me-big" id="wait-av"></div>
+    <h2 id="wait-name"></h2>
+    <p class="ok">You're in! See your name on the big screen?</p>
+    <div class="souls"><b id="wait-count">1</b> souls in the castle</div>
+    <p class="muted">Waiting for the host to start…</p>
+  </main>
+
+  <!-- INTRO -->
+  <main id="v-intro" class="view hidden center intro">
+    <div class="bolt">⚡</div>
+    <h2 class="title-font">The castle gates are opening…</h2>
+    <p class="muted">Look at the big screen!</p>
+  </main>
+
+  <!-- QUESTION PREVIEW -->
+  <main id="v-pre" class="view hidden center">
+    <div class="qbadge" id="pre-num">Question 1 of 5</div>
+    <h2 class="qtext" id="pre-text"></h2>
+    <div class="ready">Get ready…</div>
+    <div class="prebar"><i id="pre-bar"></i></div>
+  </main>
+
+  <!-- ANSWER -->
+  <main id="v-answer" class="view hidden answer">
+    <div class="qline"><span class="qbadge sm" id="ans-num">1/5</span><span class="qtext-sm" id="ans-text"></span></div>
+    <div class="tbar"><i id="tbar"></i><b id="tnum">20</b></div>
+    <div class="abtns" id="abtns"></div>
+  </main>
+
+  <!-- LOCKED -->
+  <main id="v-locked" class="view hidden center">
+    <div class="picked" id="picked"></div>
+    <h2>Answer locked in!</h2>
+    <p class="muted" id="locked-time"></p>
+    <div class="floaty-ghost">👻</div>
+    <p class="muted">Waiting for the others…</p>
+  </main>
+
+  <!-- RESULT -->
+  <main id="v-result" class="view hidden center result">
+    <div class="skit" id="skit"></div>
+    <h2 class="verdict" id="verdict"></h2>
+    <div class="gain" id="gain"></div>
+    <div class="streak" id="streak"></div>
+    <div class="rankbox"><span>You're in</span><b id="rank">—</b><span id="behind"></span></div>
+  </main>
+
+  <!-- FINAL -->
+  <main id="v-final" class="view hidden center final">
+    <div class="medal" id="f-medal">🏆</div>
+    <h2 id="f-title">You finished</h2>
+    <div class="f-score" id="f-score"></div>
+    <div class="f-top" id="f-top"></div>
+  </main>
+
+  <!-- KICKED -->
+  <main id="v-kicked" class="view hidden center">
+    <div class="medal">🚪</div>
+    <h2>The host removed you</h2>
+    <button class="btn" id="btn-rejoin">Join again</button>
+  </main>
+
+  <div class="conn hidden" id="conn">Reconnecting…</div>
+  <script type="module" src="js/play.js"></script>
+</body>
+</html>
