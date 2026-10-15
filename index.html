@@ -33,7 +33,7 @@
     <div class="lobby-main">
       <div class="lobby-top">
         <h2>Waiting for souls…</h2>
-        <div class="count-pill" id="count-pill">👻 <b id="count">0</b> players</div>
+        <div class="count-pill" id="count-pill" title="Players in the castle"><img src="assets/avatars/witch.webp" alt=""><b id="count">0</b></div>
       </div>
       <div class="players" id="players">
         <div class="empty"><span class="ghosty">👻</span>Scan the QR code to enter the castle</div>
@@ -53,16 +53,17 @@
   <!-- QUESTION / REVEAL -->
   <section id="scr-question" class="screen hidden">
     <div class="q-head">
-      <div class="q-num" id="q-num">1<small>of 5</small></div>
+      <div class="q-num" id="q-num"></div>
       <div class="q-text" id="q-text"></div>
     </div>
     <div class="pre-bar"><i id="pre-bar"></i></div>
-    <div class="walk-banner"><b id="walk-num">Question 1 of 5</b><span>The mascot sneaks deeper into the hallway…</span></div>
+    <div class="walk-banner"><b id="walk-num">Question 1 of 5</b><span><em>Kamereo</em> sneaks deeper into the hallway…</span></div>
     <div class="q-mid">
       <div class="timer" id="timer">
         <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/><circle class="prog" id="timer-prog" cx="50" cy="50" r="44" stroke-dasharray="276.46" stroke-dashoffset="0"/></svg>
         <b id="timer-num">20</b>
       </div>
+      <div class="q-media" id="q-media"></div>
       <div class="answered"><b id="ans-count">0</b><span>answers</span></div>
     </div>
     <div class="result-banner" id="result-banner"></div>
@@ -74,8 +75,17 @@
     <div class="board">
       <h2>Scoreboard</h2>
       <div class="sub" id="board-sub"></div>
-      <div class="board-list" id="board-list"></div>
-      <div class="fastest" id="fastest"></div>
+      <div class="board-grid">
+        <div class="dist">
+          <div class="dist-q" id="dist-q"></div>
+          <div class="dist-bars" id="dist-bars"></div>
+          <div class="dist-foot" id="dist-foot"></div>
+        </div>
+        <div class="board-side">
+          <div class="board-list" id="board-list"></div>
+          <div class="fastest" id="fastest"></div>
+        </div>
+      </div>
     </div>
   </section>
 

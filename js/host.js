@@ -8,6 +8,8 @@ import { adminGate, savedAdminCode, noteButton, forgetAdmin } from './gm.js';
 import { mountEditor } from './editor.js';
 import { SHAPES, el, avatarEl, countUp, confetti } from './ui.js';
 import * as sfx from './sfx.js';
+import * as music from './music.js';
+import { mediaEl, preloadMedia } from './media.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -64,6 +66,11 @@ function restore() {
   } catch (e) { return false; }
 }
 
+// seconds to answer the current question (set per question in the editor, default 20)
+const qDur = (i = S.qi) => (QUIZ[i] && QUIZ[i].time) || CONFIG.QUESTION_TIME;
+// reading time before the answers open (+2 s when there is a picture/video to look at)
+const qPreview = (i = S.qi) => CONFIG.QUESTION_PREVIEW + (QUIZ[i] && QUIZ[i].media ? 2 : 0);
+
 // ---------- networking ----------
 function send(msg) { net && net.send(msg); }
 
@@ -95,7 +102,7 @@ function handleAnswer(m) {
   if (S.phase !== 'open' || m.q !== S.qi) return;
   const p = S.players.get(m.id);
   if (!p || S.answers.has(m.id)) return;
-  const dur = CONFIG.QUESTION_TIME * 1000;
+  const dur = qDur() * 1000;
   const hostElapsed = performance.now() - S.openedAt;
   if (hostElapsed > dur + 2500) return;
   const ms = Math.max(0, Math.min(dur, Number(m.ms) || hostElapsed));
@@ -115,7 +122,7 @@ function heartbeat() {
   if (S.kicked.size) msg.k = [...S.kicked].join(',');
   if (S.phase === 'open' || S.phase === 'pre') {
     msg.qd = qPayload();
-    if (S.phase === 'open') msg.rem = Math.max(0, CONFIG.QUESTION_TIME * 1000 - (performance.now() - S.openedAt));
+    if (S.phase === 'open') msg.rem = Math.max(0, qDur() * 1000 - (performance.now() - S.openedAt));
   }
   if (S.phase === 'reveal' || S.phase === 'board' || S.phase === 'final') msg.res = resultsPayload();
   if ((S.phase === 'reveal' || S.phase === 'board') && QUIZ[S.qi]) { msg.qd = qPayload(); msg.cor = QUIZ[S.qi].answer; }
@@ -126,7 +133,9 @@ function scheduleHeartbeat(ms) { clearTimeout(hbTimer); hbTimer = setTimeout(hea
 
 function qPayload() {
   const q = QUIZ[S.qi];
-  return { i: S.qi, text: q.text, opts: q.options, dur: CONFIG.QUESTION_TIME };
+  const d = { i: S.qi, text: q.text, opts: q.options, dur: qDur(), pv: qPreview() };
+  if (q.media) d.media = q.media;
+  return d;
 }
 
 // ---------- ranking ----------
@@ -252,9 +261,10 @@ async function startGame(skipConfirm = false) {
   send({ t: 'intro' });
   scheduleHeartbeat(100);
   sfx.ambientStop();
+  music.play('game', { restart: true });
   const t = document.querySelector('.intro-title'); t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
   const introDone = stage.playIntro({
-    onThunder: (k) => sfx.thunder(k),
+    onThunder: (k) => { sfx.thunder(k); music.duck(0.35, 2200); },
     onLaugh: () => sfx.laugh(6),
     onDoor: () => sfx.doorCreak(),
     onFlicker: () => sfx.buzz(),
@@ -274,18 +284,29 @@ async function nextQuestion() {
   const scr = $('scr-question');
   scr.classList.remove('reveal', 'pre'); scr.classList.add('walk');
   $('walk-num').textContent = `Question ${S.qi + 1} of ${QUIZ.length}`;
-  $('q-num').innerHTML = `${S.qi + 1}<small>of ${QUIZ.length}</small>`;
+  paintQNum();
   $('tiles').innerHTML = '';
+  $('q-media').innerHTML = '';
   $('ans-count').textContent = '0';
   show('scr-question');
   setNext('Skip ⏭');
-  sfx.ambientStart();
-  send({ t: 'walk', i: S.qi, total: QUIZ.length });
+  music.play('game');
+  const q = QUIZ[S.qi];
+  if (q.media) preloadMedia(q.media);
+  send({ t: 'walk', i: S.qi, total: QUIZ.length, media: q.media || undefined });
   scheduleHeartbeat(500);
   updateMascot();
   // safety net: never wait more than 7 s (e.g. if the tab is in the background and animations pause)
   await Promise.race([stage.walkTo(S.qi, FX), new Promise((r) => setTimeout(r, 7000))]);
   if (S.phase === 'walk' && S.qi === my && S.run === run) showPre();
+}
+
+// "Question 2 / 5" badge with progress dots
+function paintQNum() {
+  const n = QUIZ.length, i = S.qi;
+  const dots = n <= 20 ? `<span class="qn-dots">${Array.from({ length: n }, (_, k) => `<i class="${k < i ? 'done' : k === i ? 'cur' : ''}"></i>`).join('')}</span>`
+    : `<span class="qn-bar"><i style="width:${((i + 1) / n) * 100}%"></i></span>`;
+  $('q-num').innerHTML = `<span class="qn-lbl">Question</span><span class="qn-val"><b>${i + 1}</b><small>/${n}</small></span>${dots}`;
 }
 
 // the big-screen mascot wears the avatar of the current leader
@@ -304,16 +325,24 @@ function showPre() {
   const qt = $('q-text');
   qt.textContent = q.text;
   qt.classList.remove('pop'); void qt.offsetWidth; qt.classList.add('pop');
+  const mbox = $('q-media');
+  mbox.innerHTML = '';
+  const m = mediaEl(q.media);
+  if (m) mbox.appendChild(m);
+  scr.classList.toggle('has-media', !!m);
+  $('timer-num').textContent = qDur();
+  $('timer-prog').style.strokeDashoffset = '0';
   sfx.gong();
   send({ t: 'pre', ...qPayload(), total: QUIZ.length });
   scheduleHeartbeat(500);
+  const pv = qPreview();
   const bar = $('pre-bar');
   bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)';
   void bar.offsetWidth;
-  bar.style.transition = `transform ${CONFIG.QUESTION_PREVIEW}s linear`;
+  bar.style.transition = `transform ${pv}s linear`;
   bar.style.transform = 'scaleX(0)';
   const my = S.qi, run = S.run;
-  setTimeout(() => { if (S.phase === 'pre' && S.qi === my && S.run === run) openQuestion(); }, CONFIG.QUESTION_PREVIEW * 1000);
+  setTimeout(() => { if (S.phase === 'pre' && S.qi === my && S.run === run) openQuestion(); }, pv * 1000);
 }
 
 function openQuestion() {
@@ -340,7 +369,7 @@ function openQuestion() {
 
 function runTimer() {
   cancelAnimationFrame(timerRAF);
-  const dur = CONFIG.QUESTION_TIME * 1000;
+  const dur = qDur() * 1000;
   const prog = $('timer-prog'), num = $('timer-num'), box = $('timer');
   let lastSec = -1;
   const loop = () => {
@@ -377,6 +406,7 @@ function closeQuestion() {
   S.lastRanks = prevRank;
   let nCorrect = 0;
   const counts = [0, 0, 0, 0];
+  S.lastStats = { counts, n: S.players.size, qi: S.qi };
   for (const p of S.players.values()) {
     const a = S.answers.get(p.id);
     if (a) counts[a.c] = (counts[a.c] || 0) + 1;
@@ -418,6 +448,7 @@ function closeQuestion() {
     sfx.correct();
     stage.gagBlocked(S.qi, S.gagToggle++, FX);
   } else {
+    setTimeout(() => music.duck(0.3, 2600), 700);
     stage.gagRetaliate(S.qi, FX);
   }
   if (CONFIG.AUTO_ADVANCE) autoAdvance(9);
@@ -432,6 +463,7 @@ function showBoard() {
   const box = $('board-list');
   box.innerHTML = '';
   $('board-sub').textContent = `After question ${S.qi + 1} of ${QUIZ.length}`;
+  renderDistribution();
   top.forEach((p, i) => {
     const row = el('div', 'row');
     const rk = el('div', 'rk'); rk.textContent = i + 1;
@@ -459,12 +491,43 @@ function showBoard() {
   if (CONFIG.AUTO_ADVANCE) autoAdvance(CONFIG.AUTO_ADVANCE_DELAY);
 }
 
+// Kahoot-style chart: how many players picked each answer (+ % of all players)
+function renderDistribution() {
+  const q = QUIZ[S.qi];
+  const st = S.lastStats && S.lastStats.qi === S.qi ? S.lastStats : { counts: [0, 0, 0, 0], n: S.players.size };
+  const n = Math.max(0, st.n);
+  const answered = st.counts.reduce((a, b) => a + b, 0);
+  const max = Math.max(1, ...st.counts);
+  $('dist-q').textContent = q ? q.text : '';
+  const bars = $('dist-bars');
+  bars.innerHTML = '';
+  (q ? q.options : []).forEach((o, i) => {
+    const style = ANSWER_STYLES[i];
+    const c = st.counts[i] || 0;
+    const pct = n ? Math.round((c / n) * 100) : 0;
+    const col = el('div', 'dcol' + (i === q.answer ? ' right' : ' wrong'));
+    col.style.setProperty('--c', style.color); col.style.setProperty('--d', style.dark);
+    col.innerHTML = `<div class="dval"><b>${c}</b><small>${pct}%</small></div>
+      <div class="dbar"><i></i>${i === q.answer ? '<span class="dok">✓</span>' : ''}</div>
+      <div class="dlbl"><span class="shape">${SHAPES[style.shape]}</span><span class="t"></span></div>`;
+    col.querySelector('.t').textContent = o;
+    bars.appendChild(col);
+    const fill = col.querySelector('.dbar i');
+    requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.height = Math.max(3, (c / max) * 100) + '%'; }));
+  });
+  const right = q ? st.counts[q.answer] || 0 : 0;
+  const pctRight = n ? Math.round((right / n) * 100) : 0;
+  const none = Math.max(0, n - answered);
+  $('dist-foot').innerHTML = `<span><b>${answered}</b>/${n} answered</span><span class="ok"><b>${pctRight}%</b> correct</span>` + (none ? `<span class="muted">${none} no answer</span>` : '');
+}
+
 async function showFinal() {
   S.phase = 'final';
   save();
   stage.resetActors();
   stage.setMode('final');
   show('scr-final');
+  music.play('winner', { restart: true });
   setNext('Play again ↺');
   setGameButtons(true);
   const list = ranked();
@@ -529,6 +592,7 @@ function backToLobby(ask = true) {
   resetScores();
   S.phase = 'lobby'; S.qi = -1;
   stage.setMode('lobby');
+  music.play('lobby');
   show('scr-lobby');
   renderLobby();
   setNext('', false);
@@ -605,7 +669,7 @@ function pushCtl() {
     t: 'cs', ph: S.phase, qi: S.qi, total: QUIZ.length, room,
     q: showQ ? { text: q.text, opts: q.options, answer: q.answer } : null,
     answered: S.answers.size, counts, players: S.players.size,
-    left: S.phase === 'open' ? Math.max(0, CONFIG.QUESTION_TIME * 1000 - (performance.now() - S.openedAt)) : null,
+    left: S.phase === 'open' ? Math.max(0, qDur() * 1000 - (performance.now() - S.openedAt)) : null,
     top: ranked().slice(0, 5).map((p) => [p.name, p.score, p.avatar]),
     names: [...S.players.values()].filter((p) => !p.bot).slice(0, 120).map((p) => [p.id, p.name]),
     quiz: { version: quizInfo.version, n: quizInfo.questions.length, source: quizInfo.source },
@@ -629,7 +693,7 @@ function startBots() {
   const q = QUIZ[S.qi];
   for (const p of S.players.values()) {
     if (!p.bot) continue;
-    const ms = 1200 + Math.random() * (CONFIG.QUESTION_TIME * 1000 - 2500);
+    const ms = 1200 + Math.random() * (qDur() * 1000 - 2500);
     const c = Math.random() < 0.68 ? q.answer : Math.floor(Math.random() * 4);
     botTimers.push(setTimeout(() => handleAnswer({ t: 'ans', id: p.id, q: S.qi, c, ms }), ms));
   }
@@ -685,12 +749,14 @@ async function boot() {
     if (e.key === 'f' || e.key === 'F') toggleFull();
     if (e.key === 'm' || e.key === 'M') toggleMute();
   });
-  // first click anywhere unlocks audio + lobby ambience
-  addEventListener('pointerdown', () => { sfx.audioUnlock(); if (S.phase === 'lobby') sfx.ambientStart(); }, { once: true });
-  window.__host = { S, next, addBots, restartGame, backToLobby, get QUIZ() { return QUIZ; } };
+  // background music (blocked by the browser until the first click → retried automatically)
+  music.preload();
+  music.play(S.phase === 'final' ? 'winner' : S.phase === 'lobby' ? 'lobby' : 'game');
+  addEventListener('pointerdown', () => sfx.audioUnlock(), { once: true });
+  window.__host = { S, next, addBots, restartGame, backToLobby, music, get QUIZ() { return QUIZ; } };
 }
 function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
-function toggleMute() { const m = sfx.toggleMute(); $('btn-mute').textContent = m ? '🔇' : '🔊'; }
+function toggleMute() { const m = sfx.toggleMute(); music.setMuted(m); $('btn-mute').textContent = m ? '🔇' : '🔊'; }
 
 function toggleEditor() {
   const d = $('editor');

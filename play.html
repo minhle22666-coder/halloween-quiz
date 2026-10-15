@@ -9,10 +9,19 @@
   <link rel="stylesheet" href="css/common.css">
   <link rel="stylesheet" href="css/play.css">
   <script src="lib/supabase.js"></script>
+  <script type="importmap">{ "imports": { "three": "./lib/three/three.module.js", "three/addons/": "./lib/three/addons/" } }</script>
 </head>
 <body>
   <div class="night-bg"><div class="moon"></div><div class="bats"></div><div class="fog"></div><div class="bushes"></div></div>
-  <div class="topbar hidden" id="topbar"><div class="me"><span id="me-av"></span><b id="me-name"></b></div><div class="tb-right"><div class="score" id="me-score">0</div><button class="leave" id="btn-leave" title="Leave the game">✕ Leave</button></div></div>
+  <div class="topbar hidden" id="topbar">
+    <div class="me"><span id="me-av"></span><div class="me-txt"><b id="me-name"></b><small id="me-rank">Ready to play</small></div></div>
+    <div class="tb-right">
+      <div class="scorepill" id="scorepill"><span class="sp-ic"><svg viewBox="0 0 24 24"><path d="M12 2.6l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z" fill="currentColor"/></svg></span><b id="me-score">0</b><span class="sp-gain" id="sp-gain"></span></div>
+      <button class="leave" id="btn-leave" title="Leave the game" aria-label="Leave the game"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span>Leave</span></button>
+    </div>
+  </div>
+  <!-- 3D haunted hallway (my own avatar is the mascot) — loads in the background after joining -->
+  <div class="stage3d" id="stage3d"></div>
 
   <!-- JOIN -->
   <main id="v-join" class="view">
@@ -34,13 +43,14 @@
     <p class="ok">You're in! See your name on the big screen?</p>
     <div class="souls"><b id="wait-count">1</b> souls in the castle</div>
     <p class="muted">Waiting for the host to start…</p>
+    <p class="prep hidden" id="prep"><span class="spin"></span><span id="prep-txt">Preparing the haunted hallway…</span></p>
   </main>
 
   <!-- INTRO -->
   <main id="v-intro" class="view hidden center intro">
     <div class="bolt">⚡</div>
-    <h2 class="title-font">The castle gates are opening…</h2>
-    <p class="muted">Look at the big screen!</p>
+    <h2 class="title-font" id="intro-title">The castle gates are opening…</h2>
+    <p class="muted" id="intro-sub">Look at the big screen!</p>
   </main>
 
   <!-- full-screen haunted-hallway scene behind the views (my own avatar walks in it) -->
@@ -66,21 +76,27 @@
   <!-- WALKING (between questions) -->
   <main id="v-walk" class="view hidden over">
     <div class="qbadge lg" id="walk-num">Question 1 of 5</div>
-    <p class="walk-cap">Going deeper into the haunted hallway…</p>
+    <p class="walk-cap" id="walk-cap">Sneaking deeper into the haunted hallway…</p>
   </main>
 
   <!-- QUESTION PREVIEW -->
   <main id="v-pre" class="view hidden pre">
     <div class="qcard"><div class="qn" id="pre-num">Question 1 of 5</div><div class="qt" id="pre-text"></div></div>
-    <div class="preopts" id="pre-opts"></div>
-    <p class="hint-line">Answers open in a moment…</p>
-    <div class="prebar"><i id="pre-bar"></i></div>
+    <div class="mediabox" id="pre-media"></div>
+    <div class="pre-foot">
+      <p class="hint-line">Read the question — the answers appear in a moment…</p>
+      <div class="prebar"><i id="pre-bar"></i></div>
+    </div>
   </main>
 
   <!-- ANSWER -->
   <main id="v-answer" class="view hidden answer">
-    <div class="qline"><span class="qbadge sm" id="ans-num">1/5</span><span class="qtext-sm" id="ans-text"></span></div>
-    <div class="tbar"><i id="tbar"></i><b id="tnum">20</b></div>
+    <div class="ahead">
+      <div class="ahead-q"><span class="qn" id="ans-num">1/5</span><div class="qt" id="ans-text"></div></div>
+      <div class="cd" id="cd"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26"/><circle class="prog" id="cd-prog" cx="30" cy="30" r="26" stroke-dasharray="163.36" stroke-dashoffset="0"/></svg><b id="tnum">20</b><small>sec</small></div>
+    </div>
+    <div class="mediabox sm" id="ans-media"></div>
+    <div class="tbar"><i id="tbar"></i></div>
     <div class="abtns" id="abtns"></div>
   </main>
 

@@ -1,5 +1,7 @@
 // ============================================================
-//  3D stage for the HOST screen (three.js)
+//  3D stage (three.js) — HOST big screen + a lighter version for PHONES
+//  new Stage(el)              → big screen: house, gate, hallway
+//  new Stage(el, {lite:true}) → phone: hallway only, smaller textures
 //  lobby  : orbit around the haunted house (outdoor diorama)
 //  intro  : swoop + thunder → castle gate opens → enter the haunted hallway
 //  hall   : the quiz happens here; the mascot floats deeper into the corridor
@@ -31,10 +33,11 @@ const SEG_LEN = 10;                // one hallway tile = 10 m
 const EVENTS = ['flicker', 'painting', 'door', 'clock', 'blackout'];
 
 export class Stage {
-  constructor(container) {
+  constructor(container, opts = {}) {
     this.container = container;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.lite = !!opts.lite;
+    this.renderer = new THREE.WebGLRenderer({ antialias: !this.lite, powerPreference: this.lite ? 'default' : 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.lite ? 1.6 : 1.5));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -67,8 +70,12 @@ export class Stage {
 
     this._resize = () => {
       const w = container.clientWidth, h = container.clientHeight;
+      if (!w || !h) return;
       this.renderer.setSize(w, h, false);
       this.camera.aspect = w / h;
+      // tall phone screens: wider field of view so the ghost + mascot both fit
+      this.portrait = w / h < 0.9;
+      this.camera.fov = this.portrait ? 74 : 50;
       this.camera.updateProjectionMatrix();
     };
     new ResizeObserver(this._resize).observe(container);
@@ -78,28 +85,40 @@ export class Stage {
   // ---------------------------------------------------------- loading
   async load(onProgress = () => {}, stationCount = 5) {
     const gltf = new GLTFLoader();
+    const files = this.lite
+      ? ['assets/models/ghost.glb', 'assets/models/hallway-lite.glb']
+      : ['assets/models/halloween.glb', 'assets/models/door.glb', 'assets/models/ghost.glb', 'assets/models/hallway.glb'];
     let done = 0;
-    const step = (x) => { done++; onProgress(done / 4); return x; };
-    const [house, door, ghost, hall] = await Promise.all([
-      gltf.loadAsync('assets/models/halloween.glb').then(step),
-      gltf.loadAsync('assets/models/door.glb').then(step),
-      gltf.loadAsync('assets/models/ghost.glb').then(step),
-      gltf.loadAsync('assets/models/hallway.glb').then(step),
-    ]);
-    for (const root of [house.scene, door.scene, ghost.scene, hall.scene]) {
+    const step = (x) => { done++; onProgress(done / files.length); return x; };
+    const loaded = await Promise.all(files.map((f) => gltf.loadAsync(f).then(step)));
+    for (const g of loaded) {
       const junk = [];
-      root.traverse((o) => { if (o.isLight || o.isCamera) junk.push(o); });
+      g.scene.traverse((o) => { if (o.isLight || o.isCamera) junk.push(o); });
       junk.forEach((o) => o.parent && o.parent.remove(o));
     }
-    this._buildSky();
-    this._buildLights();
-    this._buildHouse(house);
-    this._buildGate(door);
-    this._buildHall(hall, stationCount);
-    this._buildMascot();
-    this._buildGhost(ghost);
-    this._buildFx();
-    this.setMode('lobby');
+    if (this.lite) {
+      const [ghost, hall] = loaded;
+      this._buildLights();
+      this._buildHall(hall, stationCount);
+      this._buildMascot();
+      this._buildGhost(ghost);
+      this._buildFx();
+      this.setMode('hall');
+      this.resetHall();
+      this.camPos.copy(HALL_ORIGIN.clone().add(this.entrance).add(V(0.4, 0.5, 3.4)));
+      this.camLook.copy(HALL_ORIGIN.clone().add(this.entrance).add(V(0, 0, -4)));
+    } else {
+      const [house, door, ghost, hall] = loaded;
+      this._buildSky();
+      this._buildLights();
+      this._buildHouse(house);
+      this._buildGate(door);
+      this._buildHall(hall, stationCount);
+      this._buildMascot();
+      this._buildGhost(ghost);
+      this._buildFx();
+      this.setMode('lobby');
+    }
     this.renderer.setAnimationLoop(() => this._frame());
   }
 
@@ -227,6 +246,7 @@ export class Stage {
     const tiles = Math.max(3, Math.ceil((stationCount * 5 + 8) / SEG_LEN));
     this.props = { doors: [], paintings: [], vases: [], clocks: [], lamps: [] };
     const pristine = gltf.scene; // never modified: every tile is a fresh clone
+    this.tiles = [];
     const black = new THREE.MeshBasicMaterial({ color: 0x020104, side: THREE.BackSide });
 
     for (let k = 0; k < tiles; k++) {
@@ -237,6 +257,7 @@ export class Stage {
         if (side === 'B') holder.rotation.y = Math.PI; // mirrored wall on the other side
         holder.add(seg);
         H.add(holder);
+        this.tiles.push({ holder, z: -k * SEG_LEN });
         const hide = (name) => { const o = seg.getObjectByName(name); if (o) o.visible = false; };
         if (side === 'B') { hide('floor'); hide('carpet'); if (k > 0) { hide('arch'); hide('wall2'); } }
         if (side === 'A' && k % 3 === 1) hide('Clock');
@@ -380,8 +401,10 @@ export class Stage {
     ghost.position.y = -gb.min.y * gs - 0.5; // pivot ≈ middle of the ghost
     const inner = new THREE.Group();
     inner.add(ghost);
+    const sizer = new THREE.Group(); // smaller ghost on tall phone screens
+    sizer.add(inner);
     const root = new THREE.Group();
-    root.add(inner);
+    root.add(sizer);
     root.visible = false;
     this.hall.add(root);
     const mats = [];
@@ -400,7 +423,7 @@ export class Stage {
     this.mixers.push(mixer);
     const glow = new THREE.PointLight(0x9d8bff, 0, 3.5, 1.5);
     root.add(glow);
-    this.ghost = { root, inner, mats, glow };
+    this.ghost = { root, inner, sizer, mats, glow };
   }
 
   _buildFx() {
@@ -459,9 +482,9 @@ export class Stage {
     if (this.flashLevel > 0) this.flashLevel = Math.max(0, this.flashLevel - dt * 3.2);
     const inHall = this.mode === 'hall' || this.mode === 'intro-hall';
     this.hemi.intensity = (inHall ? 0.32 * Math.max(0.15, this.lampLevel) : this.baseHemi) + this.flashLevel * (inHall ? 2.5 : 7);
-    this.sky.material.uniforms.flash.value = this.flashLevel * 0.6;
+    if (this.sky) this.sky.material.uniforms.flash.value = this.flashLevel * 0.6;
 
-    if (!inHall) {
+    if (!inHall && !this.lite) {
       for (const b of this.bats) {
         const p = ((this.t * 0.02 + b.userData.phase) % 1);
         b.position.set(lerp(-220, 60, p), 70 + Math.sin(p * 9) * 8, -230);
@@ -471,20 +494,22 @@ export class Stage {
         const f = 0.85 + Math.sin(this.t * 13 + tch.l.position.x) * 0.1 + Math.random() * 0.08;
         tch.l.intensity = 18 * f; tch.f.scale.set(0.9 * f, 1.3 * f, 1);
       }
-    } else {
+    } else if (inHall) {
       this._updateHall(dt);
     }
 
     // camera
-    if (this.mode === 'lobby' || this.mode === 'final') {
+    if ((this.mode === 'lobby' || this.mode === 'final') && this.houseCenter) {
       const a = this.t * 0.05, c = this.houseCenter;
       this.camPos.set(c.x + Math.sin(a) * 34, c.y + 9 + Math.sin(this.t * 0.2) * 1.5, c.z + Math.cos(a) * 34);
       this.camLook.copy(c).add(V(0, 1, 0));
     } else if (inHall && !this.camLocked) {
       const m = this.mascot.pos;
       const o = this.camOverride;
-      const tp = o ? o.pos.clone().add(HALL_ORIGIN) : V(m.x * 0.5 + 0.2, 1.75, m.z + 2.7).add(HALL_ORIGIN);
-      const tl = o ? o.look.clone().add(HALL_ORIGIN) : V(m.x - 0.12, 1.25, m.z - 2.2).add(HALL_ORIGIN).add(this.lookBias || V());
+      const tp = o ? o.pos.clone().add(HALL_ORIGIN)
+        : (this.portrait ? V(m.x * 0.4 + 0.1, 1.72, m.z + 3.1) : V(m.x * 0.5 + 0.2, 1.75, m.z + 2.7)).add(HALL_ORIGIN);
+      const tl = o ? o.look.clone().add(HALL_ORIGIN)
+        : (this.portrait ? V(m.x - 0.05, 1.2, m.z - 2.2) : V(m.x - 0.12, 1.25, m.z - 2.2)).add(HALL_ORIGIN).add(this.lookBias || V());
       const k = 1 - Math.pow(0.02, dt);
       this.camPos.lerp(tp, k); this.camLook.lerp(tl, k);
     }
@@ -498,6 +523,9 @@ export class Stage {
   }
 
   _updateHall(dt) {
+    // only draw the hallway tiles near the camera (big win on phones)
+    const cz = this.camPos.z - HALL_ORIGIN.z;
+    for (const t of this.tiles) t.holder.visible = t.z - SEG_LEN / 2 < cz + 4 && t.z + SEG_LEN / 2 > cz - 24;
     // lamps
     if (this.flicker > 0) this.flicker = Math.max(0, this.flicker - dt);
     const heavy = this.flicker > 0;
@@ -538,8 +566,9 @@ export class Stage {
     this.endEyes.children.forEach((c) => { c.scale.y = (Math.sin(this.t * 1.3) > 0.97) ? 0.1 : 1; });
     // dizzy stars
     if (this.fx.dizzy.visible) this.fx.dizzy.children.forEach((s) => { const a = s.userData.a + this.t * 6; s.position.set(Math.cos(a) * 0.28, Math.sin(this.t * 20) * 0.02, Math.sin(a) * 0.28); });
-    // ghost glow
+    // ghost glow + size
     this.ghost.glow.intensity = this.ghost.root.visible ? 1.8 : 0;
+    this.ghost.sizer.scale.setScalar(this._gk());
   }
 
   // ---------------------------------------------------------- helpers
@@ -593,10 +622,12 @@ export class Stage {
     this.mode = mode;
     this.camLocked = false;
     const inHall = mode === 'hall' || mode === 'intro-hall';
-    this.gate.visible = mode === 'intro-gate';
     this.hall.visible = inHall;
-    this.house.visible = !inHall && mode !== 'intro-gate';
-    this.sky.visible = this.stars.visible = this.moon.visible = this.moonGlow.visible = !inHall;
+    if (!this.lite) {
+      this.gate.visible = mode === 'intro-gate';
+      this.house.visible = !inHall && mode !== 'intro-gate';
+      this.sky.visible = this.stars.visible = this.moon.visible = this.moonGlow.visible = !inHall;
+    }
     this.moonLight.visible = this.warm.visible = !inHall;
     this.scene.fog = inHall ? this.fogHall : this.fogOut;
     this.hemi.color.set(inHall ? 0x7a6fb0 : 0x8f80e0);
@@ -621,7 +652,7 @@ export class Stage {
 
   // ---------------------------------------------------------- intro
   async playIntro(cb = {}) {
-    const my = ++this.seq;
+    let my = ++this.seq;
     this.setMode('intro');
     const c = this.houseCenter, d = this.houseDoor;
     const p0 = V(c.x - 30, c.y + 30, c.z + 70), l0 = V(-40, 40, -100);
@@ -654,7 +685,8 @@ export class Stage {
     if (my !== this.seq) return;
     // into the haunted hallway: the mascot floats in nervously
     this.setMode('intro-hall');
-    this.resetHall();
+    this.resetHall();                  // (bumps this.seq)
+    my = ++this.seq;
     const M = this.mascot;
     M.pos.set(0.2, 1.3, this.entrance.z + 3.5);
     this.camLocked = true;
@@ -672,6 +704,36 @@ export class Stage {
     this.flicker = 0.5; cb.onFlicker && cb.onFlicker();
     await this.wait(1.2);
     this.setMode('hall');
+  }
+
+  /** PHONE intro: thunder outside the hallway arch, then MY mascot floats in (~11 s) */
+  async playIntroLite(cb = {}) {
+    this.setMode('hall');
+    this.resetHall();                  // (bumps this.seq)
+    const my = ++this.seq;
+    const M = this.mascot;
+    const e = HALL_ORIGIN.clone().add(this.entrance);
+    M.pos.set(0.2, 1.3, this.entrance.z + 4.2);          // behind the camera for now
+    this.camLocked = true;
+    const c0 = e.clone().add(V(0, 1.2, 7.5)), c1 = e.clone().add(V(0.3, 0.55, 3.2));
+    const look0 = e.clone().add(V(0, 0.6, -2)), look1 = e.clone().add(V(0, 0, -4));
+    this.camPos.copy(c0); this.camLook.copy(look0);
+    this.lampLevel = 0.45;
+    await this.wait(2.6); if (my !== this.seq) return;
+    this.flash(1); this.shake = 0.5; cb.onThunder && cb.onThunder();
+    await this.wait(1.6); if (my !== this.seq) return;
+    this.flash(0.8); this.shake = 0.6; cb.onThunder && cb.onThunder();
+    await this.wait(1.4); if (my !== this.seq) return;
+    this.flicker = 0.8; this.lampLevel = 1;
+    cb.onEnter && cb.onEnter();
+    const m0 = M.pos.clone();
+    await this.tween(2.6, (k) => { M.pos.lerpVectors(m0, this.entrance, k); this.camPos.lerpVectors(c0, c1, k); this.camLook.lerpVectors(look0, look1, k); }, 'inOut');
+    if (my !== this.seq) return;
+    this.startle();
+    this.mascotSay('G-gulp… 😰', 1.8);
+    this.flicker = 0.5;
+    await this.wait(1.4);
+    this.camLocked = false;
   }
 
   skipIntro() {
@@ -820,8 +882,11 @@ export class Stage {
   startle() {
     const M = this.mascot;
     M.shiver = 0.8;
+    if (this.onStartle) this.onStartle();
     this.tween(0.45, (k, raw) => { M.hop = Math.sin(raw * Math.PI) * 0.18; M.squash = Math.sin(raw * Math.PI * 2) * 0.06; }, 'linear').then(() => { M.hop = 0; M.squash = 0; });
   }
+
+  _gk() { return this.portrait ? 0.6 : 1; }
 
   // where does the ghost come from at this station?
   _spawn(st) {
@@ -841,7 +906,9 @@ export class Stage {
     const M = this.mascot;
     M.pos.x = -sp.side * 0.15;
     this._placeLamps(st.z - 0.5);
-    this.camOverride = { pos: V(-sp.side * 0.4, 1.72, st.z + 2.5), look: V(sp.side * 0.3, 1.3, st.z - 0.5) };
+    this.camOverride = this.portrait
+      ? { pos: V(sp.side * 0.3, 1.62, st.z + 3.3), look: V(sp.side * 0.3, 1.22, st.z - 0.5) }
+      : { pos: V(-sp.side * 0.4, 1.72, st.z + 2.5), look: V(sp.side * 0.3, 1.3, st.z - 0.5) };
   }
 
   async _ghostAppear(sp, my, sfx) {
@@ -925,12 +992,12 @@ export class Stage {
       this.tween(1.6, (k, raw) => { S.material.opacity = raw < 0.15 ? raw / 0.15 : 1 - (raw - 0.15) / 0.85; S.rotation.z += 0.05; S.scale.setScalar(1 + Math.sin(raw * 30) * 0.04); }, 'linear');
       sfx.bonk && sfx.bonk();
       this.shake = 0.12;
-      this.say('BONK!', this.wpos(G, V(0, 0.55, 0)), 1.0, 'shout');
+      this.say('BONK!', this.wpos(G, V(0, 0.55 * this._gk(), 0)), 1.0, 'shout');
       const b = G.position.clone();
       const back = b.clone().lerp(sp.out, 0.7);
       await this.tween(0.35, (k, raw) => { G.position.lerpVectors(b, back, k); this.ghost.inner.scale.set(1 - Math.sin(raw * Math.PI) * 0.4, 1 + Math.sin(raw * Math.PI) * 0.3, 1); }, 'out');
       if (my !== this.seq) return;
-      this.say('?!', this.wpos(G, V(0, 0.55, 0)), 0.8);
+      this.say('?!', this.wpos(G, V(0, 0.55 * this._gk(), 0)), 0.8);
       await this.wait(0.35);
       await this._ghostLeave(sp, my, sfx, true);
     } else {
@@ -940,7 +1007,7 @@ export class Stage {
       Vx.position.copy(G.position.clone().lerp(sp.pos, 0.6));
       Vx.lookAt(this.camera.position.clone().sub(HALL_ORIGIN));
       sfx.zap && sfx.zap();
-      this.say('W-what?! Let me go!', this.wpos(G, V(0, 0.55, 0)), 1.2, 'shout');
+      this.say('W-what?! Let me go!', this.wpos(G, V(0, 0.55 * this._gk(), 0)), 1.2, 'shout');
       const b = G.position.clone();
       await this.tween(1.1, (k, raw) => {
         Vx.material.opacity = Math.min(1, raw * 3) * (raw > 0.85 ? (1 - raw) / 0.15 : 1);
@@ -973,8 +1040,13 @@ export class Stage {
     const M = this.mascot, G = this.ghost.root;
     const sp = this._spawn(st);
     this._frameGag(st, sp);
-    this.camOverride.pos.set(-sp.side * 0.45, 1.62, st.z + 3.3);
-    this.camOverride.look.set(sp.side * 0.25, 1.0, st.z - 0.4);
+    if (this.portrait) {
+      this.camOverride.pos.set(sp.side * 0.25, 1.5, st.z + 3.6);
+      this.camOverride.look.set(sp.side * 0.25, 1.0, st.z - 0.4);
+    } else {
+      this.camOverride.pos.set(-sp.side * 0.45, 1.62, st.z + 3.3);
+      this.camOverride.look.set(sp.side * 0.25, 1.0, st.z - 0.4);
+    }
     this.flicker = 0.4;
     sfx.buzz && sfx.buzz();
     await this._ghostAppear(sp, my, sfx);
@@ -985,7 +1057,7 @@ export class Stage {
     const front = M.pos.clone().add(V(sp.side * 0.55, 0.1, 0.25));
     sfx.boo && sfx.boo();
     this.shake = 0.2;
-    this.say('BOO!!', this.wpos(G, V(0.15, 0.6, 0)), 1.6, 'boo');
+    this.say('BOO!!', this.wpos(G, V(0.15, 0.6 * this._gk(), 0)), 1.6, 'boo');
     await this.tween(0.3, (k) => { G.position.lerpVectors(a, front, k); G.scale.setScalar(lerp(1, 1.25, k)); G.rotation.y = lerp(G.rotation.y, -sp.side * 0.5, k); }, 'outBack');
     if (my !== this.seq) return;
     // mascot freaks out: jump, spin, faint
@@ -1001,7 +1073,7 @@ export class Stage {
     this.fx.dizzy.position.copy(M.pos).add(V(0, 0.32, 0));
     this.mascotSay('😵‍💫', 1.6, 'small');
     // ghost giggles
-    this.say('Hehehe~ 😈', this.wpos(G, V(0.2, 0.6, 0)), 1.6);
+    this.say('Hehehe~ 😈', this.wpos(G, V(0.2, 0.6 * this._gk(), 0)), 1.6);
     const gx = G.position.clone();
     await this.tween(1.5, (k, raw) => { G.position.y = gx.y + Math.abs(Math.sin(raw * 16)) * 0.1; G.rotation.z = Math.sin(raw * 16) * 0.12; }, 'linear');
     if (my !== this.seq) return;
