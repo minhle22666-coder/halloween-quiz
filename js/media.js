@@ -71,10 +71,14 @@ export async function prepareFile(file) {
     if (mime === 'video/mp4' || mime === 'video/webm' || mime === 'video/quicktime') {
       if (mime === 'video/quicktime') throw new Error('.MOV videos do not play on every phone. Convert it to MP4 (H.264) first, ≤ 5 MB.');
       if (file.size > LIMITS.videoMax) throw new Error(`This video is ${fmtSize(file.size)} — too big (max 5 MB). Cut it to ≤ 15 s and export at 720p or lower (e.g. with clipchamp / handbrake / an online video compressor), then try again.`);
+      const codec = await sniffCodec(file);
+      if (codec === 'hevc') throw new Error('This video is HEVC / H.265 (typical for iPhone recordings) — most Android phones and many laptops can’t play it. Export it as MP4 H.264 (“Most compatible”), ≤ 5 MB, then try again.');
+      if (codec === 'av1') throw new Error('This video uses the AV1 codec, which older phones can’t play. Export it as MP4 H.264, ≤ 5 MB, then try again.');
       const m = await videoMeta(url);
       if (m.sec > LIMITS.videoMaxSec + 0.5) throw new Error(`This video is ${Math.round(m.sec)} s long — max 30 s (best ≤ 15 s). Players only have a few seconds to look at it.`);
       const warn = file.size > LIMITS.videoWarn || m.sec > LIMITS.videoWarnSec || Math.max(m.w, m.h) > 1280;
       const tips = [];
+      if (mime === 'video/webm') tips.push('WebM may not play on older iPhones — MP4 (H.264) is the safest');
       if (file.size > LIMITS.videoWarn) tips.push('heavy for phones (best ≤ 3 MB)');
       if (m.sec > LIMITS.videoWarnSec) tips.push('long (best ≤ 15 s)');
       if (Math.max(m.w, m.h) > 1280) tips.push('720p is enough');
@@ -85,6 +89,18 @@ export async function prepareFile(file) {
   } finally {
     setTimeout(() => URL.revokeObjectURL(url), 15000);
   }
+}
+
+// look for the codec tag inside the file (HEVC/AV1 videos play on a desktop but not on many phones)
+async function sniffCodec(file) {
+  try {
+    const buf = new Uint8Array(await file.slice(0, Math.min(file.size, 6 * 1024 * 1024)).arrayBuffer());
+    const has = (tag) => { const t = [...tag].map((c) => c.charCodeAt(0)); outer: for (let i = 0; i < buf.length - 4; i++) { for (let k = 0; k < 4; k++) if (buf[i + k] !== t[k]) continue outer; return true; } return false; };
+    if (has('avc1')) return 'h264';
+    if (has('hvc1') || has('hev1')) return 'hevc';
+    if (has('av01')) return 'av1';
+  } catch (e) { /* ignore */ }
+  return '';
 }
 
 /** check that a pasted link really is a picture / GIF / video → { type, url, w, h } */
@@ -103,19 +119,49 @@ export async function checkLink(raw) {
   }
 }
 
-/** <img> / <video> element for a question's media */
+// iPhone shows a black box for a paused video unless we ask for a tiny time offset
+const videoSrc = (url) => (/^https?:/i.test(url) && !url.includes('#') ? url + '#t=0.001' : url);
+
+/** make sure a (muted) video is playing; if the phone blocks autoplay (e.g. iPhone Low Power Mode) show a ▶ button */
+export function kickVideo(v) {
+  if (!v || v.tagName !== 'VIDEO') return;
+  const wrap = v.closest('.vwrap');
+  const p = v.play();
+  if (p && p.then) p.then(() => wrap && wrap.classList.remove('blocked')).catch(() => wrap && wrap.classList.add('blocked'));
+}
+
+/** <img> / <video> element for a question's media
+ *  (videos come wrapped in <div class="vwrap"> with a tap-to-play button + an error note) */
 export function mediaEl(media, cls = 'qmedia') {
   if (!media || !media.url) return null;
-  let n;
   if (media.type === 'video') {
-    n = document.createElement('video');
-    n.src = media.url; n.muted = true; n.loop = true; n.autoplay = true; n.playsInline = true;
-    n.setAttribute('playsinline', ''); n.setAttribute('muted', ''); n.preload = 'auto';
-    n.addEventListener('canplay', () => { const p = n.play(); if (p && p.catch) p.catch(() => {}); }, { once: true });
-  } else {
-    n = new Image();
-    n.src = media.url; n.alt = ''; n.decoding = 'async';
+    const v = document.createElement('video');
+    // phones (iOS) need these BEFORE the source is set, or the video won't play inline
+    v.muted = true; v.defaultMuted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', ''); v.setAttribute('autoplay', ''); v.setAttribute('loop', '');
+    v.disablePictureInPicture = true;
+    v.preload = 'auto';
+    v.className = cls;
+    if (media.w && media.h) v.style.aspectRatio = `${media.w} / ${media.h}`;
+    v.src = videoSrc(media.url);
+    const wrap = document.createElement('div');
+    wrap.className = 'vwrap';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'vplay'; btn.setAttribute('aria-label', 'Play video'); btn.textContent = '▶';
+    btn.onclick = (e) => { e.stopPropagation(); kickVideo(v); };
+    const note = document.createElement('div');
+    note.className = 'verr'; note.textContent = '🎬 This video can’t play on this device — watch it on the big screen!';
+    wrap.append(v, btn, note);
+    v.addEventListener('loadeddata', () => kickVideo(v));
+    v.addEventListener('canplay', () => kickVideo(v), { once: true });
+    v.addEventListener('playing', () => wrap.classList.remove('blocked', 'failed'));
+    v.addEventListener('error', () => wrap.classList.add('failed'));
+    // still nothing after a few seconds → offer the ▶ button
+    setTimeout(() => { if (v.paused && !wrap.classList.contains('failed')) wrap.classList.add('blocked'); }, 3500);
+    return wrap;
   }
+  const n = new Image();
+  n.src = media.url; n.alt = ''; n.decoding = 'async';
   n.className = cls;
   if (media.w && media.h) n.style.aspectRatio = `${media.w} / ${media.h}`;
   return n;

@@ -73,6 +73,8 @@ Link dùng:
 1. Mở trang chủ trên máy nối máy chiếu → QR + PIN hiện ngay, cảnh 3D tải sau vài giây. Bấm **⛶** (phím `F`) để fullscreen, click 1 lần để bật âm thanh.
    (Mở trang chủ bằng điện thoại sẽ thấy màn "Join the game" để vào chơi; muốn làm host trên máy nhỏ thì bấm "I'm the host" hoặc thêm `?host` vào link.)
 2. Người chơi quét QR → nhập tên → chọn avatar → vào sảnh. Click vào tên trên sảnh để kick.
+   PIN sai / phòng không tồn tại (hoặc màn chiếu chưa mở) → điện thoại báo "No game found with PIN …" và bắt nhập lại, không cho vào.
+   Điện thoại cũng xem **intro đầy đủ** như màn chiếu (nhà ma → sấm sét → cổng lâu đài mở → avatar của mình lẻn vào hành lang); người chơi không skip được, chỉ host skip (bấm Skip trên màn chiếu là mọi điện thoại nhảy theo).
 3. **Start the game** → camera bay tới lâu đài, sấm chớp + tiếng cười → cổng lâu đài mở → mascot run rẩy bay vào **hành lang ma**.
 4. Mỗi câu hỏi:
    - **Đi sâu vào hành lang (~4 giây)**: mascot đi bình thường tới điểm dừng tiếp theo + 1 sự kiện ma ám: đèn chập chờn / bức tranh lệch và mắt người phụ nữ dõi theo / cánh cửa rung có tiếng gõ / đồng hồ quả lắc rung chuông / mất điện thấy đôi mắt đỏ trong bóng tối.
@@ -105,7 +107,7 @@ Link dùng:
 - Màn podium: **Play again ↺** = chơi lại từ đầu.
 - Điện thoại: thanh trên cùng = avatar + tên + hạng (#3 of 42) · ô điểm vàng (nhảy số + "+850" khi có điểm) · nút **Leave**.
 
-**Nhạc nền** (chỉ phát trên màn chiếu, điện thoại im lặng để khỏi loạn): sảnh chờ = `WAITING FOR SOUL`, trong lúc chơi (intro → câu hỏi → scoreboard) = `INTHEGAME`, màn Top 3 = `WINNER`. Tự chuyển bài có fade; nút 🔊 / phím `M` tắt cả nhạc lẫn hiệu ứng. Trình duyệt chặn tự phát nhạc nên cần click vào trang 1 lần.
+**Nhạc nền** (chỉ phát trên màn chiếu, điện thoại im lặng để khỏi loạn): sảnh chờ + đoạn intro bên ngoài lâu đài = `WAITING FOR SOUL`; `INTHEGAME` chỉ bắt đầu khi camera **đi qua cánh cửa vào hành lang** (hoặc khi host bấm Skip intro) và chạy suốt các câu hỏi/scoreboard; màn Top 3 = `WINNER`. Tự chuyển bài có fade; nút 🔊 / phím `M` tắt cả nhạc lẫn hiệu ứng. Trình duyệt chặn tự phát nhạc nên cần click vào trang 1 lần.
 
 Phím tắt host: `Space`/`Enter`/`→` = Next (hoặc Skip) · `F` = fullscreen · `M` = tắt tiếng.
 

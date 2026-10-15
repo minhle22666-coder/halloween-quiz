@@ -97,10 +97,10 @@ export function createPlayerNet(room, { onHostMsg, onStatus }) {
     const outbox = new BroadcastChannel('hq:' + room);
     inbox.onmessage = (e) => onHostMsg(e.data);
     setTimeout(() => onStatus && onStatus('SUBSCRIBED'), 0);
-    return { mode: 'local', send: async (p) => { outbox.postMessage(p); return true; } };
+    return { mode: 'local', send: async (p) => { outbox.postMessage(p); return true; }, close: () => { inbox.close(); outbox.close(); } };
   }
-  subscribeSupabase('room:' + room, onHostMsg, onStatus);
-  return { mode: 'supabase', send: (p) => restBroadcast('hq:' + room, p) };
+  const ch = subscribeSupabase('room:' + room, onHostMsg, onStatus);
+  return { mode: 'supabase', send: (p) => restBroadcast('hq:' + room, p), close: () => { try { supa().removeChannel(ch); } catch (e) { /* */ } } };
 }
 
 // ---------- Game-master (controller) side ----------

@@ -361,3 +361,18 @@ body.has3d #v-intro p { color: #e8dcff; text-shadow: 0 2px 8px #000; }
 body.has3d .view.result .verdict { margin-top: 1vh; }
 body.has3d.good, body.has3d.bad { background: #050208; }
 body.has3d .view.result .verdict { font-size: clamp(40px, 12vw, 56px); }
+.mediabox .vwrap { width: 100%; }
+
+/* v7: no bottom decoration once you're in (it looked odd behind the waiting room) */
+body.joined .night-bg .bushes, body.joined .night-bg .fog { display: none; }
+body.joined .night-bg { background: radial-gradient(ellipse at 50% 110%, rgba(255, 110, 60, .22), transparent 55%), radial-gradient(ellipse at 20% 10%, rgba(120, 60, 220, .35), transparent 50%), linear-gradient(180deg, #0b0518 0%, #1d0d3a 60%, #2a1040 100%); }
+#btn-join { display: flex; align-items: center; justify-content: center; gap: 10px; }
+#btn-join .spin { width: 18px; height: 18px; border-width: 3px; border-color: rgba(42, 18, 0, .25); border-top-color: #2a1200; }
+.shake { animation: shake .45s; border-color: var(--red) !important; }
+@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+#v-join .err { line-height: 1.35; }
+/* intro: title on top while outside, then it moves down once inside the hallway */
+body.has3d #v-intro.inside { justify-content: flex-end; padding-bottom: calc(env(safe-area-inset-bottom) + 40px); }
+body.has3d #v-intro.inside h2 { font-size: clamp(24px, 7vw, 32px); }
+.pin-err { min-height: 0; font-size: 14px; text-align: left; font-weight: 600; }
+.pin-err:empty { display: none; }

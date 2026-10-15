@@ -202,3 +202,14 @@ button { font-family: inherit; cursor: pointer; }
 .qe-mbusy { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .25); border-top-color: var(--orange); animation: spin .8s linear infinite; flex: none; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* question video: wrapper with tap-to-play (autoplay blocked) + "can't play" note */
+.vwrap { position: relative; display: flex; justify-content: center; align-items: center; max-width: 100%; }
+.vwrap .vplay, .vwrap .verr { display: none; position: absolute; z-index: 2; }
+.vwrap.blocked .vplay { display: grid; place-items: center; left: 50%; top: 50%; translate: -50% -50%; width: 64px; height: 64px; border-radius: 50%; border: 3px solid #fff;
+  background: rgba(20, 8, 40, .75); color: #fff; font-size: 26px; padding-left: 4px; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); cursor: pointer; }
+.vwrap.failed .verr { display: block; left: 8px; right: 8px; top: 50%; translate: 0 -50%; text-align: center; background: rgba(20, 8, 40, .88); color: #fff; font: 600 14px/1.35 var(--body); padding: 10px 12px; border-radius: 12px; }
+.vwrap.failed .vplay { display: none; }
+.qe-mprev .vwrap { flex: none; }
+.qe-mprev .vwrap .vplay { width: 34px; height: 34px; font-size: 14px; border-width: 2px; }
+.qe-mprev .vwrap .verr { font-size: 11px; padding: 4px 6px; }

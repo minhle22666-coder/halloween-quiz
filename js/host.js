@@ -261,13 +261,14 @@ async function startGame(skipConfirm = false) {
   send({ t: 'intro' });
   scheduleHeartbeat(100);
   sfx.ambientStop();
-  music.play('game', { restart: true });
+  music.play('lobby');   // "Waiting for souls" keeps playing outside; in-game music starts behind the door
   const t = document.querySelector('.intro-title'); t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
   const introDone = stage.playIntro({
     onThunder: (k) => { sfx.thunder(k); music.duck(0.35, 2200); },
     onLaugh: () => sfx.laugh(6),
     onDoor: () => sfx.doorCreak(),
     onFlicker: () => sfx.buzz(),
+    onHall: () => music.play('game', { restart: true }),
   });
   await Promise.race([introDone, new Promise((r) => setTimeout(r, 24000))]);
   if (S.phase === 'intro' && S.run === run) stage.skipIntro();

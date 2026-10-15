@@ -27,7 +27,7 @@
   <main id="v-join" class="view">
     <h1 class="logo">Haunted Quiz</h1>
     <div class="card">
-      <label class="pin-row" id="pin-row">Game PIN<input id="in-pin" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="off"></label>
+      <label class="pin-row" id="pin-row">Game PIN<input id="in-pin" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="off"><span class="err pin-err" id="pin-err"></span></label>
       <label>Your name<input id="in-name" maxlength="16" placeholder="e.g. Spooky Sam" autocomplete="off" enterkeyhint="go"></label>
       <div class="lbl">Pick your monster</div>
       <div class="av-grid" id="av-grid"></div>
@@ -41,7 +41,7 @@
     <div class="me-big" id="wait-av"></div>
     <h2 id="wait-name"></h2>
     <p class="ok">You're in! See your name on the big screen?</p>
-    <div class="souls"><b id="wait-count">1</b> souls in the castle</div>
+    <div class="souls"><b id="wait-count">1</b> <span id="wait-souls">soul</span> in the castle</div>
     <p class="muted">Waiting for the host to start…</p>
     <p class="prep hidden" id="prep"><span class="spin"></span><span id="prep-txt">Preparing the haunted hallway…</span></p>
   </main>

@@ -1,7 +1,7 @@
 // ============================================================
 //  3D stage (three.js) — HOST big screen + a lighter version for PHONES
 //  new Stage(el)              → big screen: house, gate, hallway
-//  new Stage(el, {lite:true}) → phone: hallway only, smaller textures
+//  new Stage(el, {lite:true}) → phone: same scenes (intro included), lighter hallway + rendering
 //  lobby  : orbit around the haunted house (outdoor diorama)
 //  intro  : swoop + thunder → castle gate opens → enter the haunted hallway
 //  hall   : the quiz happens here; the mascot floats deeper into the corridor
@@ -85,9 +85,8 @@ export class Stage {
   // ---------------------------------------------------------- loading
   async load(onProgress = () => {}, stationCount = 5) {
     const gltf = new GLTFLoader();
-    const files = this.lite
-      ? ['assets/models/ghost.glb', 'assets/models/hallway-lite.glb']
-      : ['assets/models/halloween.glb', 'assets/models/door.glb', 'assets/models/ghost.glb', 'assets/models/hallway.glb'];
+    const files = ['assets/models/halloween.glb', 'assets/models/door.glb', 'assets/models/ghost.glb',
+      this.lite ? 'assets/models/hallway-lite.glb' : 'assets/models/hallway.glb'];
     let done = 0;
     const step = (x) => { done++; onProgress(done / files.length); return x; };
     const loaded = await Promise.all(files.map((f) => gltf.loadAsync(f).then(step)));
@@ -96,27 +95,22 @@ export class Stage {
       g.scene.traverse((o) => { if (o.isLight || o.isCamera) junk.push(o); });
       junk.forEach((o) => o.parent && o.parent.remove(o));
     }
+    const [house, door, ghost, hall] = loaded;
+    this._buildSky();
+    this._buildLights();
+    this._buildHouse(house);
+    this._buildGate(door);
+    this._buildHall(hall, stationCount);
+    this._buildMascot();
+    this._buildGhost(ghost);
+    this._buildFx();
     if (this.lite) {
-      const [ghost, hall] = loaded;
-      this._buildLights();
-      this._buildHall(hall, stationCount);
-      this._buildMascot();
-      this._buildGhost(ghost);
-      this._buildFx();
+      // phones start inside, at the hallway entrance (they have no lobby scene)
       this.setMode('hall');
       this.resetHall();
       this.camPos.copy(HALL_ORIGIN.clone().add(this.entrance).add(V(0.4, 0.5, 3.4)));
       this.camLook.copy(HALL_ORIGIN.clone().add(this.entrance).add(V(0, 0, -4)));
     } else {
-      const [house, door, ghost, hall] = loaded;
-      this._buildSky();
-      this._buildLights();
-      this._buildHouse(house);
-      this._buildGate(door);
-      this._buildHall(hall, stationCount);
-      this._buildMascot();
-      this._buildGhost(ghost);
-      this._buildFx();
       this.setMode('lobby');
     }
     this.renderer.setAnimationLoop(() => this._frame());
@@ -484,7 +478,7 @@ export class Stage {
     this.hemi.intensity = (inHall ? 0.32 * Math.max(0.15, this.lampLevel) : this.baseHemi) + this.flashLevel * (inHall ? 2.5 : 7);
     if (this.sky) this.sky.material.uniforms.flash.value = this.flashLevel * 0.6;
 
-    if (!inHall && !this.lite) {
+    if (!inHall) {
       for (const b of this.bats) {
         const p = ((this.t * 0.02 + b.userData.phase) % 1);
         b.position.set(lerp(-220, 60, p), 70 + Math.sin(p * 9) * 8, -230);
@@ -623,11 +617,9 @@ export class Stage {
     this.camLocked = false;
     const inHall = mode === 'hall' || mode === 'intro-hall';
     this.hall.visible = inHall;
-    if (!this.lite) {
-      this.gate.visible = mode === 'intro-gate';
-      this.house.visible = !inHall && mode !== 'intro-gate';
-      this.sky.visible = this.stars.visible = this.moon.visible = this.moonGlow.visible = !inHall;
-    }
+    this.gate.visible = mode === 'intro-gate';
+    this.house.visible = !inHall && mode !== 'intro-gate';
+    this.sky.visible = this.stars.visible = this.moon.visible = this.moonGlow.visible = !inHall;
     this.moonLight.visible = this.warm.visible = !inHall;
     this.scene.fog = inHall ? this.fogHall : this.fogOut;
     this.hemi.color.set(inHall ? 0x7a6fb0 : 0x8f80e0);
@@ -687,6 +679,7 @@ export class Stage {
     this.setMode('intro-hall');
     this.resetHall();                  // (bumps this.seq)
     my = ++this.seq;
+    cb.onHall && cb.onHall();          // inside the house now (in-game music starts here)
     const M = this.mascot;
     M.pos.set(0.2, 1.3, this.entrance.z + 3.5);
     this.camLocked = true;
@@ -704,36 +697,6 @@ export class Stage {
     this.flicker = 0.5; cb.onFlicker && cb.onFlicker();
     await this.wait(1.2);
     this.setMode('hall');
-  }
-
-  /** PHONE intro: thunder outside the hallway arch, then MY mascot floats in (~11 s) */
-  async playIntroLite(cb = {}) {
-    this.setMode('hall');
-    this.resetHall();                  // (bumps this.seq)
-    const my = ++this.seq;
-    const M = this.mascot;
-    const e = HALL_ORIGIN.clone().add(this.entrance);
-    M.pos.set(0.2, 1.3, this.entrance.z + 4.2);          // behind the camera for now
-    this.camLocked = true;
-    const c0 = e.clone().add(V(0, 1.2, 7.5)), c1 = e.clone().add(V(0.3, 0.55, 3.2));
-    const look0 = e.clone().add(V(0, 0.6, -2)), look1 = e.clone().add(V(0, 0, -4));
-    this.camPos.copy(c0); this.camLook.copy(look0);
-    this.lampLevel = 0.45;
-    await this.wait(2.6); if (my !== this.seq) return;
-    this.flash(1); this.shake = 0.5; cb.onThunder && cb.onThunder();
-    await this.wait(1.6); if (my !== this.seq) return;
-    this.flash(0.8); this.shake = 0.6; cb.onThunder && cb.onThunder();
-    await this.wait(1.4); if (my !== this.seq) return;
-    this.flicker = 0.8; this.lampLevel = 1;
-    cb.onEnter && cb.onEnter();
-    const m0 = M.pos.clone();
-    await this.tween(2.6, (k) => { M.pos.lerpVectors(m0, this.entrance, k); this.camPos.lerpVectors(c0, c1, k); this.camLook.lerpVectors(look0, look1, k); }, 'inOut');
-    if (my !== this.seq) return;
-    this.startle();
-    this.mascotSay('G-gulp… 😰', 1.8);
-    this.flicker = 0.5;
-    await this.wait(1.4);
-    this.camLocked = false;
   }
 
   skipIntro() {

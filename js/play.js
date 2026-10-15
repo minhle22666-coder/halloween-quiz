@@ -8,7 +8,7 @@
 import { AVATARS, ANSWER_STYLES, CONFIG, MASCOT } from './config.js';
 import { createPlayerNet } from './net.js';
 import { SHAPES, el, avatarEl, ordinal, avatarSrc } from './ui.js';
-import { mediaEl, preloadMedia } from './media.js';
+import { mediaEl, preloadMedia, kickVideo } from './media.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -157,23 +157,68 @@ function buildJoin() {
     grid.appendChild(b);
   });
   $('btn-join').onclick = doJoin;
+  $('in-pin').addEventListener('input', () => { $('pin-err').textContent = ''; $('in-pin').classList.remove('shake'); });
   $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
 }
 
-function doJoin() {
+// ---- joining: the big screen must answer, otherwise the PIN is wrong ----
+const JOIN_TIMEOUT = 9000;
+let pending = null; // { resolve, timer, resend }
+function waitForHost(ms) {
+  return new Promise((resolve) => {
+    const done = (ok) => { if (!pending) return; clearTimeout(pending.timer); clearInterval(pending.resend); pending = null; resolve(ok); };
+    pending = { resolve: done };
+    pending.timer = setTimeout(() => done(false), ms);
+    pending.resend = setInterval(() => { if (net) sendJoin(); }, 2500);
+  });
+}
+function joinError(msg) {
+  $('pin-err').textContent = msg;
+  $('join-err').textContent = '';
+  $('pin-row').classList.remove('hidden');
+  $('pin-row').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const pinIn = $('in-pin');
+  pinIn.classList.remove('shake'); void pinIn.offsetWidth; pinIn.classList.add('shake');
+  pinIn.focus(); pinIn.select();
+  buzz([60, 40, 60]);
+}
+function setJoinBusy(busy) {
+  const b = $('btn-join');
+  b.disabled = busy;
+  b.innerHTML = busy ? '<span class="spin"></span> Looking for the castle…' : 'Enter the castle 👻';
+}
+
+async function doJoin() {
+  if (pending) return;
   const name = $('in-name').value.trim().replace(/\s+/g, ' ').slice(0, 16);
   const pin = ($('in-pin').value || room).trim();
-  if (!/^\d{6}$/.test(pin)) return ($('join-err').textContent = 'Enter the 6-digit game PIN from the big screen');
-  if (name.length < 1) return ($('join-err').textContent = 'Type your name first 👻');
+  if (!/^\d{6}$/.test(pin)) return joinError('Enter the 6-digit game PIN from the big screen');
+  if (name.length < 1) { $('join-err').textContent = 'Type your name first 👻'; return; }
+  $('join-err').textContent = ''; $('pin-err').textContent = '';
   me.name = name;
   store.set('hq-name', name); store.set('hq-avatar', me.avatar);
-  if (pin !== room) { room = pin; params.set('room', room); history.replaceState(null, '', '?' + params.toString()); }
-  sess.set('hq-joined', room);
-  connect();
+  if (pin !== room || !net) {
+    disconnect();
+    room = pin; params.set('room', room); history.replaceState(null, '', '?' + params.toString());
+    connect();
+  }
+  setJoinBusy(true);
+  const wait = waitForHost(JOIN_TIMEOUT);
   sendJoin();
+  const ok = await wait;
+  setJoinBusy(false);
+  if (!ok) {
+    disconnect();
+    return joinError(`No game found with PIN ${pin} 👻 Check the 6 digits on the big screen and try again.`);
+  }
+  enterGame();
+}
+function enterGame() {
+  sess.set('hq-joined', room);
   joined = true;
+  document.body.classList.add('joined');
   paintMe();
-  show('wait');
+  if (view === 'join' || view === 'kicked') show('wait');
   buzz(30);
   if (S3.stage) S3.stage.setMascotSprite(avatarSrc(me.avatar));
   init3D();
@@ -199,17 +244,26 @@ function connect() {
   if (net) return;
   net = createPlayerNet(room, {
     onHostMsg,
-    onStatus: (s) => $('conn').classList.toggle('hidden', s === 'SUBSCRIBED'),
+    onStatus: (s) => $('conn').classList.toggle('hidden', !joined || s === 'SUBSCRIBED'),
   });
-  setInterval(() => {
-    // no heartbeat for a while => show reconnecting hint
-    $('conn').classList.toggle('hidden', !joined || Date.now() - lastSeenAt < 9000);
-  }, 2000);
 }
+function disconnect() {
+  if (net && net.close) net.close();
+  net = null;
+  lastSeenAt = 0;
+}
+setInterval(() => {
+  // no heartbeat for a while => show reconnecting hint
+  $('conn').classList.toggle('hidden', !joined || Date.now() - lastSeenAt < 9000);
+}, 2000);
 
 function onHostMsg(m) {
   if (!m || !m.t) return;
   lastSeenAt = Date.now();
+  if (pending && m.t === 'hb') {
+    if (m.k && m.k.split(',').includes(pid)) { pending.resolve(true); return onHeartbeat(m); }
+    pending.resolve(true); // the big screen is alive → the PIN is right
+  }
   switch (m.t) {
     case 'hb': return onHeartbeat(m);
     case 'intro': return joined && showIntro();
@@ -231,10 +285,11 @@ function resetMe() {
 }
 
 function onHeartbeat(m) {
-  if (m.k && m.k.split(',').includes(pid)) { joined = false; sess.del('hq-joined'); return show('kicked'); }
+  if (m.k && m.k.split(',').includes(pid)) { joined = false; document.body.classList.remove('joined'); sess.del('hq-joined'); return show('kicked'); }
   if (!joined) return;
   nPlayers = m.n || nPlayers;
   $('wait-count').textContent = m.n;
+  $('wait-souls').textContent = m.n === 1 ? 'soul' : 'souls';
   if (me.rank) setRank(me.rank);
   const listed = (m.ids || '').split(',').includes(pid);
   if (!listed && Date.now() - lastJoinSent > 4000) sendJoin();
@@ -282,19 +337,24 @@ function putMedia(box, media) {
   if (!media) return;
   if (mediaUrl !== media.url || !mediaNode) { mediaNode = mediaEl(media, 'qmedia'); mediaUrl = media.url; }
   box.appendChild(mediaNode);
-  if (mediaNode.tagName === 'VIDEO') { const p = mediaNode.play(); if (p && p.catch) p.catch(() => {}); }
+  kickVideo(mediaNode.querySelector && mediaNode.querySelector('video')); // moving a video in the page pauses it
 }
 
+// the same cinematic as the big screen: haunted house → thunder → castle gate opens →
+// MY avatar sneaks into the hallway. Players can't skip it (only the host can, for everyone).
 function showIntro() {
   show('intro');
-  $('intro-title').textContent = 'The castle gates are opening…';
-  $('intro-sub').textContent = use3D() ? `${me.name}, stay close to your candle…` : 'Look at the big screen!';
+  $('intro-title').textContent = 'Enter… if you dare!';
+  $('intro-sub').textContent = use3D() ? '' : 'Look at the big screen!';
+  $('v-intro').classList.remove('inside');
   if (!use3D()) return;
   S3.station = -1;
-  S3.stage.playIntroLite({
+  S3.stage.playIntro({
     onThunder: () => buzz([40, 30, 90]),
-    onEnter: () => {
-      $('intro-title').textContent = `${me.name} enters the haunted hallway…`;
+    onDoor: () => buzz([20, 60, 20]),
+    onHall: () => {
+      $('v-intro').classList.add('inside');
+      $('intro-title').textContent = `${me.name} sneaks into the haunted hallway…`;
       $('intro-sub').textContent = 'Something is watching… 👀';
     },
   });
@@ -474,16 +534,26 @@ $('btn-leave').onclick = () => {
   if (!confirm('Leave the game? Your score will be lost.')) return;
   if (net) net.send({ t: 'leave', id: pid });
   joined = false;
+  document.body.classList.remove('joined');
   sess.del('hq-joined');
   me.score = 0; setScore(0); setRank(0); Q.answered = -1; lastResultQ = -1;
   show('join');
 };
 $('btn-rejoin').onclick = () => { sess.del('hq-joined'); sess.del('hq-pid'); location.reload(); };
 if (room && sess.get('hq-joined') === room && me.name) {
-  // quick rejoin after a refresh
-  connect(); sendJoin(); joined = true; paintMe(); show('wait'); init3D();
+  // quick rejoin after a refresh (if the game is gone, back to the PIN screen)
+  connect();
+  enterGame();
+  const wait = waitForHost(JOIN_TIMEOUT + 3000);
+  sendJoin();
+  wait.then((ok) => {
+    if (ok) return;
+    joined = false; document.body.classList.remove('joined'); sess.del('hq-joined');
+    disconnect();
+    show('join');
+    joinError(`Game ${room} is not running anymore. Enter the PIN on the big screen.`);
+  });
 } else {
   show('join');
-  if (room) connect();
 }
 window.__player = { pid, me, Q, S3, onHostMsg };

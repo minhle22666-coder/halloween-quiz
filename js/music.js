@@ -82,3 +82,4 @@ export function duck(level = 0.35, ms = 1800) {
   duck._t = setTimeout(() => { duckK = 1; kick(); }, ms);
 }
 export function preload() { Object.keys(TRACKS).forEach(audio); }
+export const nowPlaying = () => current;
