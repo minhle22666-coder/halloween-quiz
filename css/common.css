@@ -238,3 +238,11 @@ button { font-family: inherit; cursor: pointer; }
 .qe-card.active { border-color: var(--accent, #ff8a1f); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #ff8a1f) 45%, transparent); }
 .qe-time span:last-child { color: var(--muted); font-weight: 500; }
 @media (max-width: 640px) { .qe-answers { grid-template-columns: 1fr; } }
+/* admin code: hidden like a password, with an eye to show it */
+.pw { position: relative; display: flex; }
+.pw input { flex: 1; min-width: 0; padding-right: 56px !important; }
+.pw-eye { position: absolute; right: 8px; top: 50%; translate: 0 -50%; width: 42px; height: 42px; border: 0; border-radius: 10px; background: rgba(29, 15, 56, .08); font-size: 19px; line-height: 1; cursor: pointer; }
+.pw-eye:hover { background: rgba(29, 15, 56, .16); }
+.gate-card input[type=password] { letter-spacing: 6px; }
+.gate-card { width: min(400px, calc(100vw - 40px)); }
+.pw input { width: 100%; }

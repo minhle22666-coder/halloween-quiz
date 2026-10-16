@@ -23,7 +23,7 @@ export function adminGate() {
         <img class="gate-img" src="assets/avatars/chef.webp" alt="">
         <h1>BOS Quiz</h1>
         <p class="gate-q">Are you the game master?</p>
-        <input name="code" placeholder="Admin code" autocapitalize="characters" spellcheck="false" aria-label="Admin code">
+        <div class="pw"><input name="code" type="password" placeholder="Admin code" autocomplete="off" spellcheck="false" aria-label="Admin code"><button type="button" class="pw-eye" title="Show / hide the code" aria-label="Show the code">👁</button></div>
         <div class="gate-err"></div>
         <button class="btn" type="submit">Enter as admin</button>
         <div class="gate-or"><span>or</span></div>
@@ -35,6 +35,8 @@ export function adminGate() {
     const err = form.querySelector('.gate-err');
     const submit = form.querySelector('button[type=submit]');
     form.querySelector('.gate-skip').onclick = () => { wrap.remove(); resolve(null); };
+    // the code is hidden (••••) — the eye shows it for a moment
+    form.querySelector('.pw-eye').onclick = () => { input.type = input.type === 'password' ? 'text' : 'password'; input.focus(); };
     form.onsubmit = async (e) => {
       e.preventDefault();
       const code = input.value.trim().toUpperCase();

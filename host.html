@@ -40,6 +40,10 @@
       </div>
       <div class="lobby-bottom">
         <span class="hint">Click a player to remove them</span>
+        <label class="auto-switch" title="Auto-play: after each answer the scoreboard and the next question come by themselves (key A)">
+          <input type="checkbox" id="lobby-auto"><span class="sw"></span>
+          <span class="txt"><b>Auto-play</b><small id="lobby-auto-sub">the game runs by itself</small></span>
+        </label>
         <button class="btn" id="btn-start">Start the game</button>
       </div>
     </div>
@@ -98,15 +102,21 @@
   <canvas id="confetti"></canvas>
   <canvas id="fx" class="fx-layer"></canvas>
 
+  <!-- host controls: one big button (bottom right) + auto-play; everything else is in the menu (bottom left) -->
   <div class="controls">
-    <button class="btn hidden" id="btn-next">Next ▶</button>
+    <button class="auto-pill hidden" id="btn-auto" title="Auto-play on/off (A)"><i></i><span>Auto-play</span></button>
+    <button class="btn hidden" id="btn-next"><span class="lbl">Next ▶</span><small class="cd"></small><i class="bar"></i></button>
   </div>
   <div class="corner">
     <button id="btn-full" title="Fullscreen (F)">⛶</button>
-    <button id="btn-mute" title="Mute (M)">🔊</button>
-    <button id="btn-lib" class="pill" title="Back to the quiz library">← Library</button>
-    <button id="btn-restart" class="pill hidden" title="Restart from the beginning">⟲ Restart</button>
-    <button id="btn-exit" class="pill hidden" title="Exit to the lobby">✕ Exit</button>
+    <button id="btn-mute" title="Sound on / off (M)">🔊</button>
+    <button id="btn-menu" class="pill" title="More options" aria-haspopup="true">☰ Menu</button>
+    <div class="host-menu hidden" id="host-menu" role="menu">
+      <button data-act="edit" role="menuitem">📝 Edit questions</button>
+      <button data-act="restart" class="ingame" role="menuitem">⟲ Restart from question 1</button>
+      <button data-act="exit" class="ingame" role="menuitem">✕ End the game (back to lobby)</button>
+      <button data-act="library" role="menuitem">← Back to my quizzes</button>
+    </div>
   </div>
 
   <!-- admin-only question editor (📝) -->

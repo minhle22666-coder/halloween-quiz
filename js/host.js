@@ -6,7 +6,7 @@ import { createHostNet, createHostCtlOut, isLocalMode } from './net.js';
 import { getQuiz, normalize, toGame, verifyCode } from './quizstore.js';
 import { getTheme, getPalette, applyTheme, musicSet, greetingOf } from './themes.js';
 import { createFx } from './fx.js';
-import { adminGate, savedAdminCode, noteButton, forgetAdmin } from './gm.js';
+import { adminGate, savedAdminCode, forgetAdmin } from './gm.js';
 import { mountEditor } from './editor.js';
 import { SHAPES, el, avatarEl, countUp, confetti } from './ui.js';
 import * as sfx from './sfx.js';
@@ -261,7 +261,7 @@ function frameStage(dur = 0.6) {
 }
 addEventListener('resize', () => frameStage(0));
 const nextBtn = $('btn-next');
-function setNext(label, visible = true) { nextBtn.textContent = label; nextBtn.classList.toggle('hidden', !visible); }
+function setNext(label, visible = true) { nextBtn.querySelector('.lbl').textContent = label; nextBtn.classList.toggle('hidden', !visible); }
 
 // ============================================================ flow
 const FX = {
@@ -520,7 +520,7 @@ function closeQuestion() {
     stage.gagRetaliate(S.qi, FX);
     if (!isLegacy()) { sfx.wrong(); fx.play(THEME.fx.bad, { y: S.focusY }); }
   }
-  if (CONFIG.AUTO_ADVANCE) autoAdvance(9);
+  if (AUTO.on) autoAdvance(AUTO.REVEAL);
 }
 
 function showBoard() {
@@ -558,7 +558,7 @@ function showBoard() {
   $('fastest').textContent = fastest ? `⚡ Fastest correct answer: ${fastest.name} in ${(fastest.last.ms / 1000).toFixed(2)}s (+${fastest.last.gain})` : '';
   send({ t: 'board' });
   setNext(S.qi + 1 >= QUIZ.length ? 'Final results 🏆' : 'Next question ▶');
-  if (CONFIG.AUTO_ADVANCE) autoAdvance(CONFIG.AUTO_ADVANCE_DELAY);
+  if (AUTO.on) autoAdvance(AUTO.BOARD);
 }
 
 // Kahoot-style chart: how many players picked each answer (+ % of all players)
@@ -652,7 +652,7 @@ function resetScores() {
 }
 function stopEverything() {
   S.run++;
-  clearTimeout(autoT);
+  stopAuto();
   cancelAnimationFrame(timerRAF);
   stopBots();
   stage.resetActors();
@@ -689,16 +689,48 @@ function restartGame(ask = true) {
 function playAgain() { restartGame(false); }
 
 function setGameButtons(on) {
-  $('btn-restart').classList.toggle('hidden', !on);
-  $('btn-exit').classList.toggle('hidden', !on);
-  $('btn-lib').classList.toggle('hidden', on);
+  document.querySelectorAll('#host-menu .ingame').forEach((b) => b.classList.toggle('hidden', !on));
+  $('btn-auto').classList.toggle('hidden', !on);
 }
 
-let autoT = 0;
-function autoAdvance(sec) { clearTimeout(autoT); const ph = S.phase, qi = S.qi; autoT = setTimeout(() => { if (S.phase === ph && S.qi === qi) next(); }, sec * 1000); }
+// ---- auto-play: the scoreboard and the next question come by themselves (the host can still press Next)
+const AUTO = { on: (() => { try { return localStorage.getItem('bos-autoplay') !== '0'; } catch (e) { return true; } })(), REVEAL: 7, BOARD: 8 };
+let autoT = 0, autoI = 0;
+function paintAuto() {
+  $('btn-auto').classList.toggle('on', AUTO.on);
+  $('btn-auto').querySelector('span').textContent = AUTO.on ? 'Auto-play' : 'Manual';
+  $('btn-auto').title = AUTO.on ? 'Auto-play is ON — click to wait for you instead (A)' : 'Manual — click to let the game move on by itself (A)';
+  $('lobby-auto').checked = AUTO.on;
+  $('lobby-auto-sub').textContent = AUTO.on ? 'the game runs by itself' : 'you press Next each time';
+}
+function setAuto(on) {
+  AUTO.on = !!on;
+  try { localStorage.setItem('bos-autoplay', AUTO.on ? '1' : '0'); } catch (e) { /* */ }
+  paintAuto();
+  if (!AUTO.on) stopAuto();
+  else if (S.phase === 'reveal') autoAdvance(AUTO.REVEAL);
+  else if (S.phase === 'board') autoAdvance(AUTO.BOARD);
+}
+function stopAuto() {
+  clearTimeout(autoT); clearInterval(autoI);
+  nextBtn.classList.remove('counting');
+  nextBtn.querySelector('.cd').textContent = '';
+}
+/** move on by itself after `sec` seconds — the big button shows the countdown */
+function autoAdvance(sec) {
+  stopAuto();
+  const ph = S.phase, qi = S.qi, end = performance.now() + sec * 1000;
+  const cd = nextBtn.querySelector('.cd');
+  nextBtn.style.setProperty('--dur', sec + 's');
+  void nextBtn.offsetWidth;
+  nextBtn.classList.add('counting');
+  const paint = () => { cd.textContent = Math.max(0, Math.ceil((end - performance.now()) / 1000)) + 's'; };
+  paint(); autoI = setInterval(paint, 250);
+  autoT = setTimeout(() => { stopAuto(); if (S.phase === ph && S.qi === qi) next(); }, sec * 1000);
+}
 
 function next() {
-  clearTimeout(autoT);
+  stopAuto();
   sfx.audioUnlock();
   switch (S.phase) {
     case 'lobby': return startGame();
@@ -794,7 +826,6 @@ async function boot() {
   net = createHostNet(room, { onPlayerMsg, onStatus: (s) => { if (s !== 'SUBSCRIBED') console.warn('realtime', s); } });
   ctlOut = createHostCtlOut(room);
   setInterval(pushCtl, 1000);
-  noteButton(toggleEditor);
   mountEditor($('editor-body'), { getCode: () => adminCode, quizId, toast: hostToast, onSaved: (d) => {
     quizDoc = { ...quizDoc, ...d };
     if (S.phase === 'lobby') { refreshQuiz(); hostToast('Saved — the big screen now uses the new questions'); }
@@ -802,7 +833,24 @@ async function boot() {
   } });
   $('editor-close').onclick = toggleEditor;
   $('editor-logout').onclick = () => { forgetAdmin(); location.href = 'index.html'; };
-  $('btn-lib').onclick = () => { if (S.phase === 'lobby' || confirm('Leave the game and go back to the quiz library?')) location.href = 'index.html' + (params.has('local') ? '?local' : ''); };
+  // ☰ menu: everything the host rarely needs
+  const menu = $('host-menu');
+  const closeMenu = () => menu.classList.add('hidden');
+  $('btn-menu').onclick = (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); };
+  addEventListener('pointerdown', (e) => { if (!e.target.closest('#host-menu, #btn-menu')) closeMenu(); });
+  menu.onclick = (e) => {
+    const a = e.target.closest('[data-act]');
+    if (!a) return;
+    closeMenu();
+    if (a.dataset.act === 'edit') toggleEditor();
+    if (a.dataset.act === 'restart') restartGame();
+    if (a.dataset.act === 'exit') backToLobby();
+    if (a.dataset.act === 'library' && (S.phase === 'lobby' || confirm('Leave the game and go back to your quizzes?'))) location.href = 'index.html' + (params.has('local') ? '?local' : '');
+  };
+  $('btn-auto').onclick = () => setAuto(!AUTO.on);
+  $('lobby-auto').onchange = (e) => setAuto(e.target.checked);
+  paintAuto();
+  setGameButtons(false);
   show('scr-lobby');
   // correct answers are shuffled to random tiles every game
   if (!(restored && QUIZ.length)) QUIZ = toGame(normalize(quizDoc.questions));
@@ -835,8 +883,6 @@ async function boot() {
   if (bots > 0 && S.phase === 'lobby') addBots(Math.min(bots, 120));
 
   $('btn-start').onclick = () => next();
-  $('btn-restart').onclick = () => restartGame();
-  $('btn-exit').onclick = () => backToLobby();
   nextBtn.onclick = () => next();
   $('btn-full').onclick = toggleFull;
   $('btn-mute').onclick = toggleMute;
@@ -845,6 +891,8 @@ async function boot() {
     if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowRight') { e.preventDefault(); next(); }
     if (e.key === 'f' || e.key === 'F') toggleFull();
     if (e.key === 'm' || e.key === 'M') toggleMute();
+    if (e.key === 'a' || e.key === 'A') setAuto(!AUTO.on);
+    if (e.key === 'Escape') $('host-menu').classList.add('hidden');
   });
   // background music (blocked by the browser until the first click → retried automatically)
   music.preload();

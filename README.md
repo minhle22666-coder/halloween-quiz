@@ -36,11 +36,12 @@ Push toàn bộ thư mục lên GitHub (kéo thả "uploading an existing file" 
   **Sort**: *Last edited* · *Date created* · *A–Z* (bấm lần nữa để đảo chiều; nhớ lựa chọn).
   **▶ Play** = mở màn chiếu với PIN + QR mới · **👁** xem demo (màn chiếu + điện thoại tự chạy qua các câu) · **✏️** sửa · **⧉** nhân bản · **🗑** xoá (có hỏi lại).
 - **＋ Create quiz** → *Studio*:
-  1. **🎨 Theme** — hub 3D xoay, **vuốt trái/phải** (hoặc ‹ ›, phím ←/→, hay bấm tên theme) để đổi theme; chọn **1 trong 4 màu** (Purple, Sky Blue, Forest, Ruby Red — dùng được cho mọi theme, đổi theme vẫn giữ màu đã chọn); sửa **Title**, **Subtitle** và (theme New Year / Christmas / Mid-Autumn) **chữ chào trên bầu trời 3D** — ví dụ "Happy New Year 2027", sang năm đổi số năm là xong; chọn **nhạc nền** (▶ nghe thử). Font do theme quyết định.
+  1. **🎨 Theme** — hub 3D xoay, **vuốt trái/phải** (hoặc ‹ ›, phím ←/→, hay bấm tên theme) để đổi theme; chọn **1 trong 4 màu** (Purple, Sky Blue, Forest, Ruby Red — dùng được cho mọi theme, đổi theme vẫn giữ màu đã chọn); góc trên trái luôn ghi **"3 / 7 themes · tên theme"** (trên điện thoại có thêm chấm ● ○ ○) để biết đang ở theme thứ mấy; sửa **Title** và **Subtitle**; chọn **nhạc nền** (▶ nghe thử). Font do theme quyết định.
   2. **❓ Questions** — bên trái soạn câu, bên phải là **Live preview**: màn chiếu + điện thoại hiện đúng câu đang chọn theo theme/màu/font (bấm *Question · Answers · ✓ Right · ✗ Wrong* hoặc **▶ Play** để xem chạy thử cả hiệu ứng).
      Mỗi câu có **2–4 đáp án** (＋ Add answer / ✕ xoá bớt), bấm **✓** cạnh đáp án đúng; countdown riêng (gõ số giây, mặc định 20s; "Apply to all" cho mọi câu); ảnh/GIF/video tuỳ chọn. Thêm / nhân bản / xoá / đổi thứ tự câu (tối đa 200). Câu chưa điền đủ vẫn lưu được, chỉ bị bỏ qua khi chơi.
   3. **💾 Save** hoặc **▶ Play** (tự lưu rồi mở màn chiếu).
-- Trên màn chiếu vẫn có nút 📝 để sửa nhanh câu hỏi của quiz đang chiếu, và nút **← Library** để quay lại thư viện.
+- Trên màn chiếu, **☰ Menu** (góc dưới trái) có: 📝 sửa nhanh câu hỏi · ⟲ chơi lại từ câu 1 · ✕ kết thúc về sảnh · ← về thư viện.
+- Mã quản trò khi nhập được che thành `••••••` (bấm 👁 để xem lại).
 
 ## 4. Các theme
 
@@ -49,8 +50,8 @@ Push toàn bộ thư mục lên GitHub (kéo thả "uploading an existing file" 
 | **Classic** (mặc định) | Baloo 2 + Be Vietnam Pro | Đảo cỏ, tượng & cột đá | 🎉 Pháo giấy + lấp lánh, hub nhảy xoay | 🌧️ Mây mưa, đèn tối, avatar ủ rũ | Go to the Picnic |
 | **Summer** | Pacifico + Nunito | Nhà gỗ trên bãi biển, biển vô tận | ☀️ Mặt trời toả nắng + bóng biển nảy | 🌊 Con sóng lớn ập qua màn hình | 64 Sundays |
 | **Halloween** | Creepster + Fredoka | Nhà ma — **giữ nguyên trải nghiệm cũ** (intro sấm sét, hành lang ma, ma hù / khiên phép) | Ma bị thế lực bí ẩn chặn | Ma hù BOO! | 3 bài Halloween cũ |
-| **Happy New Year** | Lobster + Be Vietnam Pro | Đảo hoa đào bay giữa mây, cánh hoa rơi, đèn lồng, chữ **"Happy New Year 2027"** trên trời (sửa được) | 🎆 Show pháo hoa (hoa cúc, dải vàng, vòng) + lì xì, đồng vàng, hoa mai/đào rơi | 🧨 Pháo xịt "pfft…" | Silly Intro |
-| **Merry Christmas** *(mới)* | Dancing Script + Be Vietnam Pro | Cây thông + quà nhảy nhót + **tuần lộc** (có animation đứng/ăn cỏ), tuyết rơi, đèn nhấp nháy, chữ "Merry Christmas" | 🎁 Hộp quà rơi xuống bật nắp tung giấy màu + Santa bay ngang trời | ❄️ Ném tuyết "bộp" vào màn hình + bão tuyết, đèn cây tắt | Deck the Halls |
+| **Happy New Year** | Lobster + Be Vietnam Pro | Đảo hoa đào bay giữa mây, cánh hoa rơi, đèn lồng | 🎆 Show pháo hoa (hoa cúc, dải vàng, vòng) + lì xì, đồng vàng, hoa mai/đào rơi | 🧨 Pháo xịt "pfft…" | Silly Intro |
+| **Merry Christmas** *(mới)* | Dancing Script + Be Vietnam Pro | Cây thông + quà nhảy nhót + **tuần lộc** (có animation đứng/ăn cỏ), tuyết rơi, đèn nhấp nháy | 🎁 Hộp quà rơi xuống bật nắp tung giấy màu + Santa bay ngang trời | ❄️ Ném tuyết "bộp" vào màn hình + bão tuyết, đèn cây tắt | Deck the Halls |
 | **Mid-Autumn** *(mới)* | Grandstander + Be Vietnam Pro | Thế giới bánh trung thu bay giữa mây đêm, **trăng tròn** sáng, sao, **đèn lồng thả bay** khắp trời | 🏮 Đèn lồng bay lên rực rỡ, trăng sáng hơn | 🌑 Mây đen che trăng, đèn lồng tắt rơi xuống | 64 Sundays |
 | **Japanese Restaurant** *(mới)* | M PLUS Rounded 1c + Be Vietnam Pro | Quán izakaya, dây **lồng đèn giấy** quanh quán, hoa anh đào rơi | 🍣 Mưa sushi + chữ "OISHII!" | 🥵 Wasabi cay xanh màn hình + khói + chữ "WASABI!" | Go to the Picnic |
 
@@ -68,7 +69,8 @@ Push toàn bộ thư mục lên GitHub (kéo thả "uploading an existing file" 
 3. **Start the game** → intro (Halloween: lâu đài; theme khác: camera bay xuống hub + pháo giấy) → mỗi câu:
    câu hỏi (+ảnh/video) hiện trước 3–5 giây → 2–4 đáp án + countdown → chốt: **≥50% đúng** → hiệu ứng "đúng", ngược lại → hiệu ứng "sai"; banner "XX% of players got it right!" / câu theo theme.
 4. **Scoreboard**: biểu đồ cột theo số đáp án (số người & % mỗi đáp án) + top 5 + người đúng nhanh nhất → câu tiếp → **podium Top 3**.
-5. Nút góc: ⟲ Restart · ✕ Exit · ← Library (ở sảnh). Phím: `Space`/`Enter`/`→` = Next · `F` fullscreen · `M` tắt tiếng.
+5. **Auto-play** (công tắc cạnh nút *Start the game*, mặc định BẬT): sau khi chốt đáp án, **7 giây** tự sang Scoreboard, **8 giây** tự sang câu kế tiếp, hết câu tự ra podium — quản trò không cần bấm gì. Nút lớn góc phải hiện đếm ngược (thanh chạy + "4s"); bấm nút đó để đi nhanh hơn, bấm viên **Auto-play** bên cạnh (phím `A`) để chuyển sang *Manual* (tự bấm Next từng bước).
+6. Màn chiếu chỉ còn: **nút lớn** (góc phải) + **Auto-play**, và góc trái **⛶ · 🔊 · ☰ Menu**. Phím: `Space`/`Enter`/`→` = Next · `A` auto-play · `F` fullscreen · `M` tắt tiếng.
 
 **Tính điểm (giống Kahoot):** đúng = `1000 × (1 − thời_gian/countdown/2)`; sai/không trả lời = 0.
 Tập dượt đông người: thêm `&bots=70` vào link màn chiếu.
