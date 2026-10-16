@@ -3,7 +3,9 @@
 // ============================================================
 import { CONFIG, ANSWER_STYLES, AVATARS } from './config.js';
 import { createHostNet, createHostCtlOut, isLocalMode } from './net.js';
-import { loadLatestQuiz, toGame, verifyCode } from './quizstore.js';
+import { getQuiz, normalize, toGame, verifyCode } from './quizstore.js';
+import { getTheme, getPalette, applyTheme } from './themes.js';
+import { createFx } from './fx.js';
 import { adminGate, savedAdminCode, noteButton, forgetAdmin } from './gm.js';
 import { mountEditor } from './editor.js';
 import { SHAPES, el, avatarEl, countUp, confetti } from './ui.js';
@@ -38,7 +40,13 @@ const S = {
 
 let stage = null;
 let QUIZ = [];                                  // current game: shuffled questions {text, options, answer}
-let quizInfo = { questions: [], version: 0, source: 'default' };
+// the quiz being played (from the library) + its theme
+const quizId = params.get('quiz');
+let quizDoc = null;
+let THEME = getTheme('default');
+let PAL = getPalette(THEME, '');
+let fx = null;
+const isLegacy = () => !!THEME.legacy3d;   // Halloween keeps the castle/hallway experience
 let ctlOut = null;                              // host -> game-master screens
 const ctlCodes = new Map();                     // code -> verified (bool)
 let net = null;
@@ -70,6 +78,9 @@ function restore() {
 const qDur = (i = S.qi) => (QUIZ[i] && QUIZ[i].time) || CONFIG.QUESTION_TIME;
 // reading time before the answers open (+2 s when there is a picture/video to look at)
 const qPreview = (i = S.qi) => CONFIG.QUESTION_PREVIEW + (QUIZ[i] && QUIZ[i].media ? 2 : 0);
+
+// theme info sent to the phones: [theme, palette, title, subtitle]
+const themeTag = () => [THEME.id, PAL.id, (quizDoc && quizDoc.title) || 'BOS Quiz', (quizDoc && quizDoc.subtitle) || ''];
 
 // ---------- networking ----------
 function send(msg) { net && net.send(msg); }
@@ -118,7 +129,7 @@ function handleAnswer(m) {
 let hbTimer = 0;
 function heartbeat() {
   clearTimeout(hbTimer);
-  const msg = { t: 'hb', ph: S.phase, n: S.players.size, q: S.qi, total: QUIZ.length, ids: [...S.players.keys()].filter((id) => !id.startsWith('bot')).join(',') };
+  const msg = { t: 'hb', ph: S.phase, n: S.players.size, q: S.qi, total: QUIZ.length, ids: [...S.players.keys()].filter((id) => !id.startsWith('bot')).join(','), th: themeTag() };
   if (S.kicked.size) msg.k = [...S.kicked].join(',');
   if (S.phase === 'open' || S.phase === 'pre') {
     msg.qd = qPayload();
@@ -174,7 +185,7 @@ function addLobbyChip(p) {
 function renderLobby() {
   playersBox.innerHTML = '';
   chips.clear();
-  if (!S.players.size) playersBox.innerHTML = '<div class="empty"><span class="ghosty">👻</span>Scan the QR code to enter the castle</div>';
+  if (!S.players.size) playersBox.innerHTML = '<div class="empty"><span class="ghosty"><img src="assets/avatars/chef.webp" alt=""></span>Scan the QR code to join the game</div>';
   [...S.players.values()].forEach(addLobbyChip);
   updateCount();
 }
@@ -206,7 +217,7 @@ function updateCount() {
 
 function buildQR() {
   const u = new URL('play.html', location.href);
-  u.search = '?room=' + room + (params.has('local') ? '&local' : '');
+  u.search = '?room=' + room + '&th=' + THEME.id + '&pl=' + PAL.id + (params.has('local') ? '&local' : '');
   const url = u.toString();
   const qr = qrcode(0, 'H');
   qr.addData(url);
@@ -232,16 +243,32 @@ const FX = {
 
 async function refreshQuiz() {
   try {
-    const fresh = await Promise.race([loadLatestQuiz(), new Promise((r) => setTimeout(() => r(null), 4000))]);
-    if (fresh && fresh.questions.length) quizInfo = fresh;
+    const fresh = await Promise.race([getQuiz(adminCode, quizId), new Promise((r) => setTimeout(() => r(null), 4000))]);
+    if (fresh) quizDoc = fresh;
   } catch (e) { /* keep the previous quiz */ }
-  QUIZ = toGame(quizInfo.questions);
+  QUIZ = toGame(normalize(quizDoc.questions));
   showQuizInfo();
   pushCtl();
 }
 function showQuizInfo() {
-  const n = quizInfo.questions.length;
-  $('quiz-info').textContent = quizInfo.version ? `Quiz v${quizInfo.version} · ${n} questions` : `Default quiz · ${n} questions`;
+  const n = normalize(quizDoc.questions).length;
+  $('quiz-info').textContent = `${THEME.name} · ${n} question${n === 1 ? '' : 's'}`;
+}
+/** fonts, colours and wording of the quiz's theme */
+function paintTheme() {
+  ({ theme: THEME, palette: PAL } = applyTheme(quizDoc.theme, quizDoc.palette));
+  document.body.classList.toggle('legacy', isLegacy());
+  document.body.classList.toggle('hubtheme', !isLegacy());
+  document.title = (quizDoc.title || 'BOS Quiz') + ' · BOS Quiz';
+  $('logo-t').textContent = quizDoc.title || 'BOS Quiz';
+  $('logo-s').textContent = quizDoc.subtitle || '';
+  $('intro-title').textContent = THEME.copy.intro;
+  $('final-title').textContent = THEME.copy.final;
+  const ws = $('walk-sub');
+  if (isLegacy()) ws.innerHTML = '<em>Kamereo</em> sneaks deeper into the hallway…';
+  else ws.textContent = THEME.copy.walk;
+  music.setTracks(THEME.music);
+  document.querySelector('#count-pill img').src = isLegacy() ? 'assets/avatars/witch.webp' : 'assets/avatars/chef.webp';
 }
 
 async function startGame(skipConfirm = false) {
@@ -261,7 +288,7 @@ async function startGame(skipConfirm = false) {
   send({ t: 'intro' });
   scheduleHeartbeat(100);
   sfx.ambientStop();
-  music.play('lobby');   // "Waiting for souls" keeps playing outside; in-game music starts behind the door
+  music.play('lobby');   // Halloween: the waiting music keeps playing outside; in-game music starts behind the castle door
   const t = document.querySelector('.intro-title'); t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
   const introDone = stage.playIntro({
     onThunder: (k) => { sfx.thunder(k); music.duck(0.35, 2200); },
@@ -269,6 +296,7 @@ async function startGame(skipConfirm = false) {
     onDoor: () => sfx.doorCreak(),
     onFlicker: () => sfx.buzz(),
     onHall: () => music.play('game', { restart: true }),
+    onBurst: () => fx && fx.play('burst', { colors: [PAL.accent, PAL.accent2, '#ffffff', PAL.sky[0]] }),
   });
   await Promise.race([introDone, new Promise((r) => setTimeout(r, 24000))]);
   if (S.phase === 'intro' && S.run === run) stage.skipIntro();
@@ -281,6 +309,7 @@ async function nextQuestion() {
   if (S.qi >= QUIZ.length) return showFinal();
   S.answers.clear();
   S.phase = 'walk';
+  if (fx) fx.clear();
   const my = S.qi, run = S.run;
   const scr = $('scr-question');
   scr.classList.remove('reveal', 'pre'); scr.classList.add('walk');
@@ -314,7 +343,7 @@ function paintQNum() {
 function updateMascot() {
   const leader = ranked()[0];
   const id = leader && leader.score > 0 ? leader.avatar : null;
-  stage.setMascotSprite(id ? AVATARS.find((a) => a.id === id).src : null);
+  stage.setMascotSprite(id ? AVATARS.find((a) => a.id === id).src : (isLegacy() ? null : 'assets/avatars/chef.webp'));
 }
 
 // 2) the question card appears
@@ -433,9 +462,7 @@ function closeQuestion() {
   const pct = nPlayers ? Math.round((nCorrect / nPlayers) * 100) : 0;
   const good = nPlayers > 0 && nCorrect / nPlayers >= 0.5;   // ≥50% of players right → the ghost is stopped
   const banner = $('result-banner');
-  banner.innerHTML = good
-    ? `<b>${pct}%</b> of players got it right!`
-    : `<b>${100 - pct}%</b> of players got BOO'd! 👻`;
+  banner.innerHTML = good ? THEME.copy.good(pct) : THEME.copy.bad(100 - pct);
   banner.classList.toggle('good', good);
   banner.classList.toggle('bad', !good);
   banner.style.color = '';
@@ -448,9 +475,11 @@ function closeQuestion() {
   if (good) {
     sfx.correct();
     stage.gagBlocked(S.qi, S.gagToggle++, FX);
+    if (!isLegacy()) fx.play(THEME.fx.good, { colors: [PAL.accent, PAL.accent2, '#ffffff', '#06d6a0', '#ff4d6d'] });
   } else {
     setTimeout(() => music.duck(0.3, 2600), 700);
     stage.gagRetaliate(S.qi, FX);
+    if (!isLegacy()) { sfx.wrong(); fx.play(THEME.fx.bad); }
   }
   if (CONFIG.AUTO_ADVANCE) autoAdvance(9);
 }
@@ -567,8 +596,9 @@ async function showFinal() {
   sfx.drumroll(1.6); await wait(1700); nodes[2].classList.add('show'); sfx.pop();
   sfx.drumroll(1.6); await wait(1900); nodes[1].classList.add('show'); sfx.pop();
   sfx.drumroll(2.4); await wait(2600); nodes[0].classList.add('show');
-  sfx.fanfare(); sfx.laugh(4);
+  sfx.fanfare(); if (isLegacy()) sfx.laugh(4);
   confetti($('confetti'), { duration: 9000 });
+  if (!isLegacy()) fx.play(THEME.fx.good === 'confetti' ? 'burst' : THEME.fx.good, { colors: [PAL.accent, PAL.accent2, '#ffffff'] });
   rest.classList.toggle('show', list.length > 3);
 }
 
@@ -617,6 +647,7 @@ function playAgain() { restartGame(false); }
 function setGameButtons(on) {
   $('btn-restart').classList.toggle('hidden', !on);
   $('btn-exit').classList.toggle('hidden', !on);
+  $('btn-lib').classList.toggle('hidden', on);
 }
 
 let autoT = 0;
@@ -673,7 +704,7 @@ function pushCtl() {
     left: S.phase === 'open' ? Math.max(0, qDur() * 1000 - (performance.now() - S.openedAt)) : null,
     top: ranked().slice(0, 5).map((p) => [p.name, p.score, p.avatar]),
     names: [...S.players.values()].filter((p) => !p.bot).slice(0, 120).map((p) => [p.id, p.name]),
-    quiz: { version: quizInfo.version, n: quizInfo.questions.length, source: quizInfo.source },
+    quiz: { id: quizId, title: quizDoc && quizDoc.title, theme: THEME.id, n: QUIZ.length },
   });
 }
 
@@ -703,29 +734,47 @@ function stopBots() { botTimers.forEach(clearTimeout); botTimers = []; }
 
 // ============================================================ boot
 async function boot() {
+  // 1) the quiz (+ its theme) from the library
+  if (!quizId) { location.replace('index.html' + (params.has('local') ? '?local' : '')); return; }
+  try { quizDoc = await getQuiz(adminCode, quizId); }
+  catch (e) {
+    $('loading').innerHTML = `<p>Could not open this quiz: ${e.message}</p><a class="btn" href="index.html${params.has('local') ? '?local' : ''}">← Back to the library</a>`;
+    return;
+  }
+  paintTheme();
   const restored = restore();
   buildQR();
+  fx = createFx($('fx'));
   // listen for players right away (even while the 3D scene is still loading)
   net = createHostNet(room, { onPlayerMsg, onStatus: (s) => { if (s !== 'SUBSCRIBED') console.warn('realtime', s); } });
   ctlOut = createHostCtlOut(room);
   setInterval(pushCtl, 1000);
   noteButton(toggleEditor);
-  mountEditor($('editor-body'), { getCode: () => adminCode, toast: hostToast, onSaved: () => {
+  mountEditor($('editor-body'), { getCode: () => adminCode, quizId, toast: hostToast, onSaved: (d) => {
+    quizDoc = { ...quizDoc, ...d };
     if (S.phase === 'lobby') { refreshQuiz(); hostToast('Saved — the big screen now uses the new questions'); }
     else hostToast('Saved — the new questions start with the next game');
   } });
   $('editor-close').onclick = toggleEditor;
   $('editor-logout').onclick = () => { forgetAdmin(); location.href = 'index.html'; };
+  $('btn-lib').onclick = () => { if (S.phase === 'lobby' || confirm('Leave the game and go back to the quiz library?')) location.href = 'index.html' + (params.has('local') ? '?local' : ''); };
   show('scr-lobby');
-  // latest saved quiz (Supabase) — correct answers are shuffled to random tiles
-  quizInfo = await loadLatestQuiz();
-  if (!(restored && QUIZ.length)) QUIZ = toGame(quizInfo.questions);
+  // correct answers are shuffled to random tiles every game
+  if (!(restored && QUIZ.length)) QUIZ = toGame(normalize(quizDoc.questions));
   showQuizInfo();
-  const { Stage } = await import('./stage3d.js');
-  stage = new Stage($('stage'));
-  window.__stage = stage;
   $('btn-start').disabled = true;
-  await stage.load((k) => { $('loading').querySelector('.bar i').style.width = Math.round(k * 100) + '%'; }, Math.max(QUIZ.length, 8));
+  const bar = (k) => { $('loading').querySelector('.bar i').style.width = Math.round(k * 100) + '%'; };
+  $('loading-txt').textContent = isLegacy() ? 'Summoning the castle…' : 'Loading the 3D world…';
+  if (isLegacy()) {
+    const { Stage } = await import('./stage3d.js');
+    stage = new Stage($('stage'));
+    await stage.load(bar, Math.max(QUIZ.length, 8));
+  } else {
+    const { HubStage } = await import('./hubstage.js');
+    stage = new HubStage($('stage'));
+    await stage.load(THEME.id, PAL.id, bar);
+  }
+  window.__stage = stage;
   $('btn-start').disabled = false;
   $('loading').style.opacity = '0';
   setTimeout(() => $('loading').remove(), 700);
@@ -754,7 +803,7 @@ async function boot() {
   music.preload();
   music.play(S.phase === 'final' ? 'winner' : S.phase === 'lobby' ? 'lobby' : 'game');
   addEventListener('pointerdown', () => sfx.audioUnlock(), { once: true });
-  window.__host = { S, next, addBots, restartGame, backToLobby, music, get QUIZ() { return QUIZ; } };
+  window.__host = { S, next, addBots, restartGame, backToLobby, music, fx, get QUIZ() { return QUIZ; }, get THEME() { return THEME; } };
 }
 function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
 function toggleMute() { const m = sfx.toggleMute(); music.setMuted(m); $('btn-mute').textContent = m ? '🔇' : '🔊'; }

@@ -3,120 +3,80 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Haunted Quiz</title>
-  <link rel="icon" href="assets/img/pumpkin.svg">
+  <title>BOS Quiz</title>
+  <link rel="icon" href="assets/avatars/chef.webp">
   <link rel="stylesheet" href="css/common.css">
-  <link rel="stylesheet" href="css/host.css">
-  <script src="lib/qrcode.js"></script>
+  <link rel="stylesheet" href="css/admin.css">
   <script src="lib/supabase.js"></script>
   <script type="importmap">{ "imports": { "three": "./lib/three/three.module.js", "three/addons/": "./lib/three/addons/" } }</script>
 </head>
-<body>
-  <div id="stage"></div>
-
-  <div id="loading">
-    <p>Summoning the castle…</p>
-    <div class="bar"><i></i></div>
-  </div>
-
-  <!-- LOBBY -->
-  <section id="scr-lobby" class="screen hidden">
-    <div class="join-card">
-      <div class="logo">Haunted Quiz<small>HALLOWEEN NIGHT</small></div>
-      <div class="qr" id="qr"></div>
-      <div class="scan">Scan to join, or open</div>
-      <div class="url" id="join-url"></div>
-      <div class="pin"><span>Game PIN</span><b id="pin">------</b></div>
-      <div class="quiz-info" id="quiz-info">Loading quiz…</div>
-      <div class="mode-warn hidden" id="mode-warn">LOCAL DEMO mode — players must be tabs in this same browser. Add your Supabase keys in <b>js/config.js</b> to play on phones.</div>
-    </div>
-    <div class="lobby-main">
-      <div class="lobby-top">
-        <h2>Waiting for souls…</h2>
-        <div class="count-pill" id="count-pill" title="Players in the castle"><img src="assets/avatars/witch.webp" alt=""><b id="count">0</b></div>
+<body class="adm">
+  <!-- ============ LIBRARY ============ -->
+  <section id="v-lib" class="hidden">
+    <header class="adm-top">
+      <a class="brand" href="#"><img src="assets/avatars/chef.webp" alt=""><span>BOS Quiz</span></a>
+      <div class="sp"></div>
+      <button class="btn" id="btn-new">＋ Create quiz</button>
+      <button class="link" id="btn-logout" title="Log out of admin">Log out</button>
+    </header>
+    <main class="lib">
+      <div class="lib-head">
+        <div><h1>My quizzes</h1><p class="muted" id="lib-count">Loading…</p></div>
+        <input id="lib-search" type="search" placeholder="Search quizzes…" autocomplete="off">
       </div>
-      <div class="players" id="players">
-        <div class="empty"><span class="ghosty">👻</span>Scan the QR code to enter the castle</div>
-      </div>
-      <div class="lobby-bottom">
-        <span class="hint">Click a player to remove them</span>
-        <button class="btn" id="btn-start">Start the game</button>
-      </div>
-    </div>
+      <div class="lib-msg hidden" id="lib-msg"></div>
+      <div class="lib-grid" id="lib-grid"></div>
+    </main>
   </section>
 
-  <!-- INTRO -->
-  <section id="scr-intro" class="screen hidden">
-    <div class="intro-title">Enter… if you dare!</div>
-  </section>
+  <!-- ============ STUDIO (create / edit one quiz) ============ -->
+  <section id="v-studio" class="hidden">
+    <header class="adm-top studio-top">
+      <button class="back" id="st-back" title="Back to my quizzes">← <span>My quizzes</span></button>
+      <input class="st-name" id="st-name" maxlength="80" placeholder="Quiz title" autocomplete="off">
+      <nav class="st-tabs">
+        <button data-tab="theme" class="on">🎨 Theme</button>
+        <button data-tab="questions">❓ Questions <b id="st-qcount">0</b></button>
+      </nav>
+      <div class="sp"></div>
+      <span class="st-status" id="st-status"></span>
+      <button class="btn ghost" id="st-save">💾 Save</button>
+      <button class="btn" id="st-play">▶ Play</button>
+    </header>
 
-  <!-- QUESTION / REVEAL -->
-  <section id="scr-question" class="screen hidden">
-    <div class="q-head">
-      <div class="q-num" id="q-num"></div>
-      <div class="q-text" id="q-text"></div>
-    </div>
-    <div class="pre-bar"><i id="pre-bar"></i></div>
-    <div class="walk-banner"><b id="walk-num">Question 1 of 5</b><span><em>Kamereo</em> sneaks deeper into the hallway…</span></div>
-    <div class="q-mid">
-      <div class="timer" id="timer">
-        <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/><circle class="prog" id="timer-prog" cx="50" cy="50" r="44" stroke-dasharray="276.46" stroke-dashoffset="0"/></svg>
-        <b id="timer-num">20</b>
+    <div class="st-pane" id="pane-theme">
+      <div class="tp-stage" id="tp-stage">
+        <div class="tp-canvas" id="tp-canvas"></div>
+        <div class="tp-title" id="tp-title"><b id="tp-t">BOS Quiz</b><small id="tp-s"></small></div>
+        <button class="tp-arrow prev" id="tp-prev" aria-label="Previous theme">‹</button>
+        <button class="tp-arrow next" id="tp-next" aria-label="Next theme">›</button>
+        <div class="tp-loading hidden" id="tp-loading"><span class="spin"></span> Loading 3D…</div>
+        <div class="tp-dots" id="tp-dots"></div>
+        <div class="tp-hint">Swipe or use ‹ › to browse themes</div>
       </div>
-      <div class="q-media" id="q-media"></div>
-      <div class="answered"><b id="ans-count">0</b><span>answers</span></div>
-    </div>
-    <div class="result-banner" id="result-banner"></div>
-    <div class="tiles" id="tiles"></div>
-  </section>
-
-  <!-- SCOREBOARD -->
-  <section id="scr-board" class="screen hidden">
-    <div class="board">
-      <h2>Scoreboard</h2>
-      <div class="sub" id="board-sub"></div>
-      <div class="board-grid">
-        <div class="dist">
-          <div class="dist-q" id="dist-q"></div>
-          <div class="dist-bars" id="dist-bars"></div>
-          <div class="dist-foot" id="dist-foot"></div>
+      <aside class="tp-side">
+        <div class="tp-card">
+          <div class="tp-tname"><span id="tp-name">Classic</span><em class="tp-sel">✓ Selected</em></div>
+          <p class="muted" id="tp-blurb"></p>
+          <label class="tp-field">Title on the big screen<input id="tp-in-title" maxlength="80" autocomplete="off"></label>
+          <label class="tp-field">Subtitle<input id="tp-in-sub" maxlength="80" autocomplete="off"></label>
+          <div class="tp-label">Colour palette</div>
+          <div class="tp-pals" id="tp-pals"></div>
+          <div class="tp-label">Fonts</div>
+          <div class="tp-fonts" id="tp-fonts"></div>
+          <div class="tp-label">Right / wrong animation</div>
+          <div class="tp-fx" id="tp-fx"></div>
+          <button class="btn tp-next" id="tp-go">Next: questions →</button>
         </div>
-        <div class="board-side">
-          <div class="board-list" id="board-list"></div>
-          <div class="fastest" id="fastest"></div>
-        </div>
-      </div>
+      </aside>
+    </div>
+
+    <div class="st-pane hidden" id="pane-questions">
+      <div class="qwrap"><div id="ed-root"></div></div>
     </div>
   </section>
 
-  <!-- FINAL -->
-  <section id="scr-final" class="screen hidden">
-    <h2>The Champions</h2>
-    <div class="podium" id="podium"></div>
-    <div class="final-rest" id="final-rest"></div>
-  </section>
-  <canvas id="confetti"></canvas>
-
-  <div class="controls">
-    <button class="btn hidden" id="btn-next">Next ▶</button>
-  </div>
-  <div class="corner">
-    <button id="btn-full" title="Fullscreen (F)">⛶</button>
-    <button id="btn-mute" title="Mute (M)">🔊</button>
-    <button id="btn-restart" class="pill hidden" title="Restart from the beginning">⟲ Restart</button>
-    <button id="btn-exit" class="pill hidden" title="Exit to the lobby">✕ Exit</button>
-  </div>
-
-  <!-- admin-only question editor (📝) -->
-  <aside id="editor" class="editor">
-    <div class="editor-top">
-      <b>📝 Edit questions</b>
-      <button class="link" id="editor-logout" title="Log out admin">Log out</button>
-      <button class="x" id="editor-close" title="Close">✕</button>
-    </div>
-    <div id="editor-body"></div>
-  </aside>
-
-  <script type="module" src="js/host.js"></script>
+  <div class="adm-loading" id="adm-loading"><span class="spin"></span></div>
+  <script type="module" src="js/admin.js"></script>
 </body>
 </html>

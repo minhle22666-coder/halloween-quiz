@@ -213,3 +213,7 @@ button { font-family: inherit; cursor: pointer; }
 .qe-mprev .vwrap { flex: none; }
 .qe-mprev .vwrap .vplay { width: 34px; height: 34px; font-size: 14px; border-width: 2px; }
 .qe-mprev .vwrap .verr { font-size: 11px; padding: 4px 6px; }
+
+/* ---------- themes: title font weight follows the theme (Creepster 400, Baloo 800, Pacifico 400, Playfair 900) ---------- */
+:is(.logo, .join-card .logo, .lobby-top h2, .board h2, #scr-final h2, .walk-banner b, .intro-title, .verdict, .gate-card h1, .qn-val b, .title-font, .bubble.boo, .ms-boo, .result-banner, .qbadge.lg) { font-weight: var(--title-weight, 400); }
+.gate-card h1 { font-family: var(--title); }

@@ -1,6 +1,6 @@
 // ============================================================
 //  Quiz storage
-//  Stored format (one version = one row in Supabase `quiz_versions`):
+//  A quiz stores its questions as:
 //    [{ text, correct, wrong: [w1, w2, w3], time: 20, media: { type: 'image'|'video', url } | null }, ...]
 //  Game format (after shuffling, used by host/players):
 //    [{ text, options: [4], answer: index, time, media }, ...]
@@ -59,29 +59,6 @@ export function toGame(list) {
   });
 }
 
-/** latest saved quiz → { questions, version, savedAt, source } */
-export async function loadLatestQuiz() {
-  if (!isLocalMode()) {
-    try {
-      const { data, error } = await supa().from('quiz_versions').select('id, created_at, questions').order('id', { ascending: false }).limit(1);
-      if (error) throw error;
-      if (data && data[0]) {
-        const qs = normalize(data[0].questions);
-        if (qs.length) return { questions: qs, version: data[0].id, savedAt: data[0].created_at, source: 'supabase' };
-      }
-      return { questions: defaultQuiz(), version: 0, source: 'default' };
-    } catch (e) {
-      console.warn('[quiz] could not load from Supabase, using defaults:', e.message || e);
-      return { questions: defaultQuiz(), version: 0, source: 'default', error: e.message || String(e) };
-    }
-  }
-  try {
-    const d = JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null');
-    if (d && normalize(d.questions).length) return { questions: normalize(d.questions), version: d.version, savedAt: d.savedAt, source: 'local' };
-  } catch (e) { /* ignore */ }
-  return { questions: defaultQuiz(), version: 0, source: 'default' };
-}
-
 async function sha256(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -117,19 +94,103 @@ export async function uploadMedia(code, blob, ext) {
   return bucket.getPublicUrl(path).data.publicUrl;
 }
 
-/** save a new quiz version → version number */
-export async function saveQuiz(code, questions) {
-  const qs = normalize(questions);
-  if (!qs.length) throw new Error('Add at least one complete question (question + 4 answers).');
-  code = String(code || '').trim().toUpperCase();
+// ============================================================ many quizzes (library)
+//  quiz doc = { id, title, subtitle, theme, palette, questions, created_at, updated_at }
+//  Supabase: table "quizzes" behind code-checked functions (supabase/quizzes.sql)
+//  LOCAL demo mode: localStorage
+const LIB_KEY = 'bos-quizzes';
+const notReady = 'The quiz library is not set up yet: run supabase/quizzes.sql once in Supabase → SQL Editor.';
+const rpcErr = (e) => new Error(/could not find the function|does not exist|schema cache/i.test(e.message || '') ? notReady : (e.message || String(e)));
+
+/** keep every question (even unfinished ones) but tidy the fields */
+export function cleanQuestions(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((q) => ({
+    text: String(q.text || '').trim(),
+    correct: String(q.correct || '').trim(),
+    wrong: [0, 1, 2].map((i) => String((q.wrong || [])[i] || '').trim()),
+    time: clampTime(q.time),
+    media: cleanMedia(q.media),
+  }));
+}
+export const blankQuestion = (time = CONFIG.QUESTION_TIME) => ({ text: '', correct: '', wrong: ['', '', ''], time, media: null });
+
+function localLib() {
+  let lib = null;
+  try { lib = JSON.parse(localStorage.getItem(LIB_KEY) || 'null'); } catch (e) { lib = null; }
+  if (!lib) {
+    lib = {};
+    // first run: bring over the old single quiz (or the built-in sample) as a Halloween quiz
+    let old = null;
+    try { old = JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null'); } catch (e) { /* */ }
+    const id = 'local-' + Math.random().toString(36).slice(2, 10);
+    const now = new Date().toISOString();
+    lib[id] = { id, title: 'BOS Quiz', subtitle: 'Halloween Night', theme: 'halloween', palette: 'haunted', questions: cleanQuestions(old && old.questions ? old.questions : defaultQuiz()), created_at: now, updated_at: now };
+    localStorage.setItem(LIB_KEY, JSON.stringify(lib));
+  }
+  return lib;
+}
+const saveLocalLib = (lib) => localStorage.setItem(LIB_KEY, JSON.stringify(lib));
+async function checkLocal(code) { if (!(await verifyCode(code))) throw new Error('Wrong game-master code'); }
+const up = (c) => String(c || '').trim().toUpperCase();
+
+export async function listQuizzes(code) {
   if (!isLocalMode()) {
-    const { data, error } = await supa().rpc('save_quiz', { p_code: code, p_questions: qs });
-    if (error) throw new Error(error.message);
+    const { data, error } = await supa().rpc('list_quizzes', { p_code: up(code) });
+    if (error) throw rpcErr(error);
+    return data || [];
+  }
+  await checkLocal(code);
+  return Object.values(localLib())
+    .map((q) => ({ ...q, n: q.questions.length, questions: undefined }))
+    .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+}
+
+export async function getQuiz(code, id) {
+  if (!isLocalMode()) {
+    const { data, error } = await supa().rpc('get_quiz', { p_code: up(code), p_id: id });
+    if (error) throw rpcErr(error);
+    return { ...data, questions: cleanQuestions(data.questions) };
+  }
+  await checkLocal(code);
+  const q = localLib()[id];
+  if (!q) throw new Error('Quiz not found');
+  return JSON.parse(JSON.stringify(q));
+}
+
+/** create (no id) or update → the saved id */
+export async function saveQuizDoc(code, doc) {
+  const payload = {
+    id: doc.id || undefined,
+    title: String(doc.title || '').trim().slice(0, 80) || 'BOS Quiz',
+    subtitle: String(doc.subtitle || '').trim().slice(0, 80),
+    theme: doc.theme || 'default',
+    palette: doc.palette || '',
+    questions: cleanQuestions(doc.questions),
+  };
+  if (!isLocalMode()) {
+    const { data, error } = await supa().rpc('upsert_quiz', { p_code: up(code), p_quiz: payload });
+    if (error) throw rpcErr(error);
     return data;
   }
-  if (!(await verifyCode(code))) throw new Error('Wrong game-master code');
-  const prev = JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null');
-  const version = ((prev && prev.version) || 0) + 1;
-  localStorage.setItem(LOCAL_KEY, JSON.stringify({ questions: qs, version, savedAt: new Date().toISOString() }));
-  return version;
+  await checkLocal(code);
+  const lib = localLib();
+  const now = new Date().toISOString();
+  const id = payload.id && lib[payload.id] ? payload.id : 'local-' + Math.random().toString(36).slice(2, 10);
+  lib[id] = { ...payload, id, created_at: (lib[id] && lib[id].created_at) || now, updated_at: now };
+  saveLocalLib(lib);
+  return id;
+}
+
+export async function deleteQuiz(code, id) {
+  if (!isLocalMode()) {
+    const { error } = await supa().rpc('delete_quiz', { p_code: up(code), p_id: id });
+    if (error) throw rpcErr(error);
+    return true;
+  }
+  await checkLocal(code);
+  const lib = localLib();
+  delete lib[id];
+  saveLocalLib(lib);
+  return true;
 }

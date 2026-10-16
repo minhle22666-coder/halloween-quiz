@@ -1,7 +1,7 @@
 // ============================================================
 //  Admin (game master) access
 //  - adminGate(): shown when someone opens the home page.
-//      code BOS-HOST → resolves with the code (this screen becomes the admin big screen)
+//      code BOS-HOST → resolves with the code (admin: quiz library / big screen)
 //      "I'm a player" → resolves null
 //  - noteButton(): the 📝 icon, only ever mounted on admin screens.
 // ============================================================
@@ -20,8 +20,8 @@ export function adminGate() {
     wrap.className = 'gate';
     wrap.innerHTML = `
       <form class="gate-card" autocomplete="off">
-        <img class="gate-img" src="assets/avatars/witch.webp" alt="">
-        <h1>Haunted Quiz</h1>
+        <img class="gate-img" src="assets/avatars/chef.webp" alt="">
+        <h1>BOS Quiz</h1>
         <p class="gate-q">Are you the game master?</p>
         <input name="code" placeholder="Admin code" autocapitalize="characters" spellcheck="false" aria-label="Admin code">
         <div class="gate-err"></div>

@@ -60,7 +60,7 @@ function openApp() {
     store.set('hq-gm-room', v);
     const u = new URL(location.href); u.searchParams.set('room', v); location.href = u.toString();
   });
-  loadEditor();
+  $('ed-root').innerHTML = '<p class="muted">Open the big screen first — the questions of the quiz it is playing appear here.</p>';
 }
 
 // ---------------- tabs ----------------
@@ -149,7 +149,8 @@ function onState(m) {
       pl.appendChild(c);
     });
   }
-  $('quizv').textContent = m.quiz ? (m.quiz.version ? `Big screen is using quiz v${m.quiz.version} (${m.quiz.n} questions)` : `Big screen is using the default quiz (${m.quiz.n} questions)`) : '';
+  $('quizv').textContent = m.quiz ? `Big screen is playing "${m.quiz.title || 'BOS Quiz'}" (${m.quiz.n} questions)` : '';
+  if (m.quiz && m.quiz.id && m.quiz.id !== editorQuiz) loadEditor(m.quiz.id);
   setButtons();
 }
 
@@ -174,9 +175,11 @@ $('c-restart').onclick = () => { if (confirm('Restart the game from the beginnin
 $('c-exit').onclick = () => { if (confirm('Exit to the lobby? Scores reset.')) send('exit'); };
 $('c-reload').onclick = () => { send('reload'); toast('Big screen is loading the latest quiz…'); };
 
-// ---------------- question editor ----------------
-function loadEditor() {
-  mountEditor($('ed-root'), { getCode: () => code, toast, onSaved: () => { if (net) send('reload'); } });
+// ---------------- question editor (the quiz the big screen is playing) ----------------
+let editorQuiz = null;
+function loadEditor(quizId) {
+  editorQuiz = quizId;
+  mountEditor($('ed-root'), { getCode: () => code, quizId, toast, onSaved: () => { if (net) send('reload'); } });
 }
 
 boot();

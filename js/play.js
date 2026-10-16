@@ -1,14 +1,16 @@
 // ============================================================
-//  PLAYER (phone)
-//  After joining, a light 3D haunted hallway loads in the background:
-//  MY avatar is the mascot — it floats into the hallway, gets scared at every
-//  station, and the ghost is blocked (my answer right) or scares me (wrong).
-//  If 3D can't run on this phone, a 2D version of the scene is used instead.
+//  PLAYER (phone) — follows the theme of the quiz on the big screen
+//  • Halloween: a light 3D haunted hallway (castle intro, ghost scares / magic shield),
+//    with a 2D fallback when 3D can't run
+//  • Classic / Summer / Lunar New Year: the theme's hub + MY avatar + 2D effects
+//    (confetti, beach balls, fireworks… / rain cloud, big wave, firecracker fizzle)
 // ============================================================
 import { AVATARS, ANSWER_STYLES, CONFIG, MASCOT } from './config.js';
 import { createPlayerNet } from './net.js';
 import { SHAPES, el, avatarEl, ordinal, avatarSrc } from './ui.js';
 import { mediaEl, preloadMedia, kickVideo } from './media.js';
+import { getTheme, getPalette, applyTheme } from './themes.js';
+import { createFx } from './fx.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -38,6 +40,35 @@ const Q = { i: -1, answered: -1, openAt: 0, dur: 20000, total: 5, choice: null, 
 let view = 'join';
 let lastResultQ = -1;
 
+// ---------------- theme (from the QR link, then from the big screen's heartbeat) ----------------
+let THEME = getTheme('default'), PAL = getPalette(THEME, '');
+let themeKey = '';
+let fx = null;
+let booted = false;
+const isLegacy = () => !!THEME.legacy3d;
+function setTheme(id, pal, title, sub) {
+  const key = [id, pal, title, sub].join('|');
+  if (key === themeKey) return;
+  themeKey = key;
+  ({ theme: THEME, palette: PAL } = applyTheme(id || 'default', pal));
+  document.body.classList.toggle('legacy', isLegacy());
+  document.body.classList.toggle('hubtheme', !isLegacy());
+  if (title != null) { $('join-title').textContent = title || 'BOS Quiz'; document.title = (title || 'BOS Quiz') + ' · BOS Quiz'; }
+  if (sub != null) $('join-sub').textContent = sub || '';
+  $('ts-hub').src = THEME.hub.image;
+  if (!joined && view === 'join') $('btn-join').innerHTML = isLegacy() ? 'Enter the castle 👻' : 'Join the game 🎮';
+  $('in-name').placeholder = isLegacy() ? 'e.g. Spooky Sam' : 'e.g. Minh';
+  try { sess.set('hq-theme-' + room, JSON.stringify([id, pal, title, sub])); } catch (e) { /* */ }
+  if (joined && isLegacy()) init3D();
+  if (booted) show(view);
+}
+{ // first guess: the QR link carries the theme; a refresh remembers it
+  let saved = null;
+  try { saved = JSON.parse(sess.get('hq-theme-' + room) || 'null'); } catch (e) { /* */ }
+  if (saved) setTheme(...saved);
+  else setTheme(params.get('th') || 'default', params.get('pl') || '', null, null);
+}
+
 // ---------------- 3D scene ----------------
 const S3 = { stage: null, state: 'off', station: -1, pct: 0 };
 const can3D = (() => {
@@ -52,7 +83,7 @@ const FX3 = {
 };
 
 async function init3D() {
-  if (S3.state !== 'off') return;
+  if (S3.state !== 'off' || !isLegacy()) return;
   if (!can3D) { S3.state = 'failed'; return paintPrep(); }
   S3.state = 'loading';
   paintPrep();
@@ -105,8 +136,9 @@ function atStation(i) {
 const SCENE_MODE = { intro: 'on', walk: 'on', pre: 'dim', answer: 'still', locked: 'on', result: 'on' };
 function show(v) {
   view = v;
-  scene(SCENE_MODE[v] || 'off');
-  if (use3D() || !STAGE_VIEWS[v]) stageOff();
+  scene(isLegacy() ? SCENE_MODE[v] || 'off' : 'off');
+  if (use3D() || !STAGE_VIEWS[v] || !isLegacy()) stageOff();
+  tsMode(v);
   document.querySelectorAll('.view').forEach((n) => n.classList.toggle('hidden', n.id !== 'v-' + v));
   $('topbar').classList.toggle('hidden', v === 'join' || v === 'kicked');
   if (v !== 'result') document.body.classList.remove('good', 'bad');
@@ -185,7 +217,7 @@ function joinError(msg) {
 function setJoinBusy(busy) {
   const b = $('btn-join');
   b.disabled = busy;
-  b.innerHTML = busy ? '<span class="spin"></span> Looking for the castle…' : 'Enter the castle 👻';
+  b.innerHTML = busy ? '<span class="spin"></span> Looking for the game…' : (isLegacy() ? 'Enter the castle 👻' : 'Join the game 🎮');
 }
 
 async function doJoin() {
@@ -260,6 +292,7 @@ setInterval(() => {
 function onHostMsg(m) {
   if (!m || !m.t) return;
   lastSeenAt = Date.now();
+  if (m.t === 'hb' && m.th) setTheme(...m.th); // theme of the quiz on the big screen
   if (pending && m.t === 'hb') {
     if (m.k && m.k.split(',').includes(pid)) { pending.resolve(true); return onHeartbeat(m); }
     pending.resolve(true); // the big screen is alive → the PIN is right
@@ -288,8 +321,9 @@ function onHeartbeat(m) {
   if (m.k && m.k.split(',').includes(pid)) { joined = false; document.body.classList.remove('joined'); sess.del('hq-joined'); return show('kicked'); }
   if (!joined) return;
   nPlayers = m.n || nPlayers;
+  if (m.th) setTheme(...m.th);
   $('wait-count').textContent = m.n;
-  $('wait-souls').textContent = m.n === 1 ? 'soul' : 'souls';
+  $('wait-souls').textContent = isLegacy() ? (m.n === 1 ? 'soul in the castle' : 'souls in the castle') : (m.n === 1 ? 'player in the game' : 'players in the game');
   if (me.rank) setRank(me.rank);
   const listed = (m.ids || '').split(',').includes(pid);
   if (!listed && Date.now() - lastJoinSent > 4000) sendJoin();
@@ -314,7 +348,7 @@ const MS = $('ms');
 let bubbleT = 0;
 const STAGE_VIEWS = { walk: 'walk', pre: 'pre', locked: 'locked', result: 'result' };
 function playStage(mode, cls = '', bubble = '', bubbleAt = 0) {
-  if (use3D()) return;
+  if (use3D() || !isLegacy()) return;
   $('ms-mascot-img').src = avatarSrc(me.avatar) || MASCOT.sprite; // the mascot is MY avatar
   MS.className = `ministage on m-${mode}`;
   void MS.offsetWidth; // restart CSS animations
@@ -325,6 +359,31 @@ function playStage(mode, cls = '', bubble = '', bubbleAt = 0) {
   if (bubble) bubbleT = setTimeout(() => { b.textContent = bubble; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }, bubbleAt);
 }
 function stageOff() { MS.classList.remove('on'); clearTimeout(bubbleT); }
+
+// ---------------- themed 2D scene (non-Halloween) ----------------
+const TS = $('ts');
+let tsBubbleT = 0;
+function tsMode(v, extra = '') {
+  if (isLegacy()) { TS.className = 'tscene'; return; }
+  $('ts-av').src = avatarSrc(me.avatar);
+  const keep = v === 'result' ? extra : '';
+  TS.className = `tscene on m-${v} ${keep}`;
+}
+function tsPlay(v, cls, bubble = '', at = 0) {
+  TS.className = `tscene on m-${v}`;
+  void TS.offsetWidth; // restart the CSS animations
+  TS.className = `tscene on m-${v} ${cls}`;
+  const b = $('ts-bubble');
+  b.classList.remove('show');
+  clearTimeout(tsBubbleT);
+  if (bubble) tsBubbleT = setTimeout(() => { b.textContent = bubble; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }, at);
+}
+function fxPlay(name, opts = {}) {
+  if (!fx) fx = createFx($('ts-fx'));
+  fx.resize();
+  fx.clear();
+  fx.play(name, { colors: [PAL.accent, PAL.accent2, '#ffffff', '#06d6a0', '#ff4d6d'], n: 14, ...opts });
+}
 
 // ---------------- question flow ----------------
 const qnum = (i, n) => `Question ${i + 1} <small>/ ${n}</small>`;
@@ -344,6 +403,14 @@ function putMedia(box, media) {
 // MY avatar sneaks into the hallway. Players can't skip it (only the host can, for everyone).
 function showIntro() {
   show('intro');
+  if (!isLegacy()) {
+    $('intro-title').textContent = THEME.copy.intro;
+    $('intro-sub').textContent = `Good luck, ${me.name}! 🍀`;
+    $('v-intro').classList.remove('inside');
+    tsPlay('intro', 'enter');
+    setTimeout(() => { if (view === 'intro') fxPlay('burst'); }, 700);
+    return;
+  }
   $('intro-title').textContent = 'Enter… if you dare!';
   $('intro-sub').textContent = use3D() ? '' : 'Look at the big screen!';
   $('v-intro').classList.remove('inside');
@@ -365,7 +432,11 @@ function showWalk(m) {
   if (m.media) preloadMedia(m.media); // start downloading the picture/video early
   $('walk-num').innerHTML = qnum(m.i, Q.total);
   show('walk');
-  if (use3D()) {
+  if (!isLegacy()) {
+    if (fx) fx.clear();
+    $('walk-cap').textContent = THEME.copy.walk;
+    tsPlay('walk', 'hop');
+  } else if (use3D()) {
     S3.station = m.i;
     S3.stage.walkTo(m.i, FX3);
   } else {
@@ -478,11 +549,11 @@ function showResult(res, q) {
   const good = ok === 1;
   const v = $('verdict');
   v.className = 'verdict ' + (good ? 'good' : 'bad');
-  v.textContent = good ? 'Correct!' : ok === -1 ? "Time's up!" : 'Boo! Wrong!';
+  v.textContent = good ? THEME.copy.correct : ok === -1 ? THEME.copy.timeout : THEME.copy.wrong;
   $('gain').textContent = good ? `+${gain} pts` : '+0 pts';
   $('streak').textContent = good && streak > 1 ? `🔥 ${streak} in a row!` : '';
   $('rank').textContent = ordinal(rank);
-  $('behind').textContent = rank === 1 ? "You're leading the coven! 👑" : behind === 0 ? `Tied with ${ahead}` : `${behind.toLocaleString('en-US')} pts behind ${ahead}`;
+  $('behind').textContent = rank === 1 ? (isLegacy() ? "You're leading the coven! 👑" : "You're in the lead! 👑") : behind === 0 ? `Tied with ${ahead}` : `${behind.toLocaleString('en-US')} pts behind ${ahead}`;
   const ca = $('correct-ans');
   if (Q.correct != null && Q.opts && Q.opts[Q.correct] != null) {
     const st = ANSWER_STYLES[Q.correct];
@@ -494,10 +565,13 @@ function showResult(res, q) {
   // let the scene play first, then slide the score panel in
   const panel = document.querySelector('.res-panel');
   panel.classList.remove('late'); void panel.offsetWidth;
-  if (use3D()) panel.classList.add('late');
+  if (use3D() || !isLegacy()) panel.classList.add('late');
   show('result');
   // MY own result decides MY animation (not the room majority)
-  if (use3D()) {
+  if (!isLegacy()) {
+    if (good) { tsPlay('result', 'res-good', THEME.copy.goodLine, 900); fxPlay(THEME.fx.good); }
+    else { tsPlay('result', `res-bad bad-${THEME.fx.bad}`, ok === -1 ? 'Too slow… ⏰' : THEME.copy.badLine, 1500); fxPlay(THEME.fx.bad); }
+  } else if (use3D()) {
     atStation(q);
     if (good) S3.stage.gagBlocked(q, q % 2, FX3);
     else S3.stage.gagRetaliate(q, FX3);
@@ -512,7 +586,7 @@ function showFinal(m) {
   const r = m.res && m.res[pid];
   if (r) { setScore(r[2]); setRank(r[3]); }
   const rank = r ? r[3] : null;
-  $('f-medal').textContent = rank === 1 ? '🏆' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🎃';
+  $('f-medal').textContent = rank === 1 ? '🏆' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : (isLegacy() ? '🎃' : '🎉');
   $('f-title').textContent = rank ? `You finished ${ordinal(rank)}!` : 'Game over!';
   $('f-score').textContent = r ? `${r[2].toLocaleString('en-US')} pts` : '';
   const top = $('f-top');
@@ -525,10 +599,12 @@ function showFinal(m) {
     top.appendChild(row);
   });
   show('final');
+  if (!isLegacy() && rank && rank <= 3) setTimeout(() => fxPlay(THEME.fx.good === 'confetti' ? 'burst' : THEME.fx.good), 300);
   buzz([40, 60, 40, 60, 120]);
 }
 
 // ---------------- boot ----------------
+booted = true;
 buildJoin();
 $('btn-leave').onclick = () => {
   if (!confirm('Leave the game? Your score will be lost.')) return;
@@ -555,5 +631,6 @@ if (room && sess.get('hq-joined') === room && me.name) {
   });
 } else {
   show('join');
+  if (/^\d{6}$/.test(room)) connect(); // shows the quiz's title + theme before joining
 }
 window.__player = { pid, me, Q, S3, onHostMsg };

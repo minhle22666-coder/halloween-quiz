@@ -2,20 +2,25 @@
 //  Question editor (admin only). Mounted inside a container element.
 //  Each question = text + 1 correct answer + 3 wrong answers
 //                + countdown (default 20 s) + optional picture / GIF / video.
-//  Save → new version in Supabase; games always use the latest version,
-//  with the answer order shuffled every game.
+//  It edits one quiz document ({ id, title, theme, palette, questions }).
+//    mountEditor(root, { getCode, loadDoc, saveDoc?, embedded?, onDirty?, onSaved?, toast })
+//  embedded = the page around it owns the Save button (the quiz studio).
+//  The answer order is shuffled every game, so the correct one lands on a random tile.
 // ============================================================
 import { CONFIG } from './config.js';
-import { loadLatestQuiz, saveQuiz, normalize, uploadMedia, clampTime, MIN_TIME, MAX_TIME } from './quizstore.js';
+import { getQuiz, saveQuizDoc, normalize, cleanQuestions, blankQuestion, uploadMedia, clampTime, MIN_TIME, MAX_TIME } from './quizstore.js';
 import { prepareFile, checkLink, mediaEl, fmtSize, MEDIA_HINT } from './media.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const QUICK_TIMES = [10, 20, 30, 60];
 
-export function mountEditor(root, { getCode, onSaved, toast = (m) => alert(m) }) {
+export function mountEditor(root, { getCode, loadDoc, quizId, saveDoc, embedded = false, onDirty, onSaved, toast = (m) => alert(m) }) {
   root.classList.add('qeditor');
+  if (embedded) root.classList.add('embedded');
+  if (!loadDoc && quizId) loadDoc = () => getQuiz(getCode(), quizId);
+  if (!saveDoc) saveDoc = async (d) => { const id = await saveQuizDoc(getCode(), d); return { ...d, id }; };
   root.innerHTML = `
-    <div class="qe-info"><div class="qe-ver">Loading the latest quiz…</div>
+    <div class="qe-info"><div class="qe-ver">Loading the quiz…</div>
       <div class="qe-help">Type the <b class="ok">correct answer</b> in the green box and 3 <b class="bad">wrong answers</b> below it.
       The answers are shuffled every game, so the correct one lands on a random tile.</div>
       <div class="qe-alltime">⏱ Countdown for every question
@@ -31,22 +36,34 @@ export function mountEditor(root, { getCode, onSaved, toast = (m) => alert(m) })
   const ver = root.querySelector('.qe-ver');
   const saveBtn = root.querySelector('.qe-save');
   const fileIn = root.querySelector('.qe-file');
+  let doc = null;
   let draft = [];
   let dirty = false;
   let uploading = 0;
   let fileTarget = null;
 
-  const markDirty = (v = true) => { dirty = v; status.textContent = v ? 'Unsaved changes' : 'All changes saved'; status.classList.toggle('warn', v); };
-
-  async function load() {
-    const info = await loadLatestQuiz();
-    draft = info.questions.map((q) => ({ ...q, wrong: [...q.wrong], media: q.media ? { ...q.media } : null }));
-    ver.innerHTML = info.version
-      ? `Editing <b>quiz v${info.version}</b> (latest save${info.savedAt ? ', ' + new Date(info.savedAt).toLocaleString() : ''}) · ${draft.length} questions`
-      : `Editing the <b>default quiz</b> · ${draft.length} questions` + (info.error ? ` <span class="bad">(database not ready: ${esc(info.error)})</span>` : '');
+  const markDirty = (v = true) => {
+    dirty = v; status.textContent = v ? 'Unsaved changes' : 'All changes saved'; status.classList.toggle('warn', v);
+    paintInfo();
+    onDirty && onDirty(v);
+  };
+  function paintInfo() {
+    if (!doc) return;
+    const ready = normalize(draft).length;
+    ver.innerHTML = `<b>${esc(doc.title || 'Untitled quiz')}</b> · ${draft.length} question${draft.length === 1 ? '' : 's'}` +
+      (ready < draft.length ? ` <span class="bad">(${draft.length - ready} unfinished — skipped when playing)</span>` : '');
+  }
+  function setDoc(d) {
+    doc = d;
+    draft = cleanQuestions(d.questions).map((q) => ({ ...q, wrong: [...q.wrong], media: q.media ? { ...q.media } : null }));
+    if (!draft.length) draft.push(blankQuestion());
     render();
     dirty = false; status.textContent = 'No changes'; status.classList.remove('warn');
-    return info;
+    paintInfo();
+  }
+  async function load() {
+    try { setDoc(await loadDoc()); } catch (e) { ver.innerHTML = `<span class="bad">Could not load the quiz: ${esc(e.message)}</span>`; }
+    return doc;
   }
 
   function renderMedia(q, box) {
@@ -80,7 +97,7 @@ export function mountEditor(root, { getCode, onSaved, toast = (m) => alert(m) })
       card.className = 'qe-card';
       card.innerHTML = `
         <div class="qe-head"><b>Question ${i + 1}</b>
-          <span class="qe-tools"><button type="button" data-a="up" title="Move up">↑</button><button type="button" data-a="down" title="Move down">↓</button><button type="button" data-a="del" title="Delete">🗑</button></span></div>
+          <span class="qe-tools"><button type="button" data-a="up" title="Move up">↑</button><button type="button" data-a="down" title="Move down">↓</button><button type="button" data-a="dup" title="Duplicate">⧉</button><button type="button" data-a="del" title="Delete">🗑</button></span></div>
         <textarea rows="2" data-f="text" placeholder="Question…"></textarea>
         <div class="qe-media"></div>
         <label class="ans ok"><span>✓</span><input data-f="correct" placeholder="Correct answer"></label>
@@ -113,7 +130,8 @@ export function mountEditor(root, { getCode, onSaved, toast = (m) => alert(m) })
       card.querySelector('.qe-tools').onclick = (e) => {
         const a = e.target.dataset.a;
         if (!a) return;
-        if (a === 'del') { if (!confirm(`Delete question ${i + 1}?`)) return; draft.splice(i, 1); }
+        if (a === 'del') { if ((q.text || q.correct) && !confirm(`Delete question ${i + 1}?`)) return; draft.splice(i, 1); if (!draft.length) draft.push(blankQuestion()); }
+        if (a === 'dup') draft.splice(i + 1, 0, { ...q, wrong: [...q.wrong], media: q.media ? { ...q.media } : null, _box: null });
         if (a === 'up' && i > 0) [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]];
         if (a === 'down' && i < draft.length - 1) [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]];
         markDirty(); render();
@@ -201,32 +219,34 @@ export function mountEditor(root, { getCode, onSaved, toast = (m) => alert(m) })
   root.querySelector('.qe-all-in').addEventListener('keydown', (e) => e.stopPropagation());
 
   root.querySelector('.qe-add').onclick = () => {
-    draft.push({ text: '', correct: '', wrong: ['', '', ''], time: clampTime(root.querySelector('.qe-all-in').value), media: null });
+    draft.push(blankQuestion(clampTime(root.querySelector('.qe-all-in').value)));
     markDirty(); render();
     const last = list.lastElementChild;
     last.scrollIntoView({ behavior: 'smooth', block: 'center' });
     last.querySelector('textarea').focus();
   };
 
-  saveBtn.onclick = async () => {
-    if (uploading) return toast('Wait for the upload to finish…');
-    const complete = normalize(draft);
-    const incomplete = draft.length - complete.length;
-    if (!complete.length) return toast('Fill in at least one question with all 4 answers');
-    if (incomplete && !confirm(`${incomplete} question(s) are incomplete and will be skipped. Save anyway?`)) return;
+  /** the quiz with the edited questions (unfinished questions are kept) */
+  const getQuestions = () => cleanQuestions(draft);
+
+  async function save() {
+    if (uploading) { toast('Wait for the upload to finish…'); return null; }
     saveBtn.disabled = true; status.textContent = 'Saving…';
     try {
-      const v = await saveQuiz(getCode(), complete);
-      await load();
-      status.textContent = `Saved as v${v}`;
-      toast(`💾 Saved as quiz v${v}`);
-      onSaved && onSaved(v);
+      const saved = await saveDoc({ ...doc, questions: getQuestions() });
+      doc = { ...doc, ...saved };
+      markDirty(false);
+      status.textContent = 'Saved ✓';
+      onSaved && onSaved(doc);
+      return doc;
     } catch (e) {
       status.textContent = 'Save failed';
       toast('⚠ ' + e.message);
-    } finally { saveBtn.disabled = false; }
-  };
+      return null;
+    } finally { saveBtn.disabled = uploading > 0; }
+  }
+  saveBtn.onclick = async () => { if (await save()) toast('💾 Saved'); };
 
-  load();
-  return { load, isDirty: () => dirty };
+  if (loadDoc) load();
+  return { load, setDoc, save, getQuestions, isDirty: () => dirty, isUploading: () => uploading > 0, markSaved: () => markDirty(false), getDoc: () => doc };
 }
