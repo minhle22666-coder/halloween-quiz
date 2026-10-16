@@ -4,7 +4,7 @@
 import { CONFIG, ANSWER_STYLES, AVATARS } from './config.js';
 import { createHostNet, createHostCtlOut, isLocalMode } from './net.js';
 import { getQuiz, normalize, toGame, verifyCode } from './quizstore.js';
-import { getTheme, getPalette, applyTheme, musicSet } from './themes.js';
+import { getTheme, getPalette, applyTheme, musicSet, greetingOf } from './themes.js';
 import { createFx } from './fx.js';
 import { adminGate, savedAdminCode, noteButton, forgetAdmin } from './gm.js';
 import { mountEditor } from './editor.js';
@@ -80,7 +80,7 @@ const qDur = (i = S.qi) => (QUIZ[i] && QUIZ[i].time) || CONFIG.QUESTION_TIME;
 const qPreview = (i = S.qi) => CONFIG.QUESTION_PREVIEW + (QUIZ[i] && QUIZ[i].media ? 2 : 0);
 
 // theme info sent to the phones: [theme, palette, title, subtitle]
-const themeTag = () => [THEME.id, PAL.id, (quizDoc && quizDoc.title) || 'BOS Quiz', (quizDoc && quizDoc.subtitle) || ''];
+const themeTag = () => [THEME.id, PAL.id, (quizDoc && quizDoc.title) || 'BOS Quiz', (quizDoc && quizDoc.subtitle) || '', greetingOf(quizDoc)];
 
 // ---------- networking ----------
 function send(msg) { net && net.send(msg); }
@@ -276,6 +276,7 @@ async function refreshQuiz() {
   } catch (e) { /* keep the previous quiz */ }
   QUIZ = toGame(normalize(quizDoc.questions));
   showQuizInfo();
+  if (stage && stage.setGreeting) stage.setGreeting(greetingOf(quizDoc), THEME.id);
   pushCtl();
 }
 function showQuizInfo() {
@@ -325,7 +326,10 @@ async function startGame(skipConfirm = false) {
     onDoor: () => sfx.doorCreak(),
     onFlicker: () => sfx.buzz(),
     onHall: () => music.play('game', { restart: true }),
-    onBurst: () => fx && fx.play('burst', { colors: [PAL.accent, PAL.accent2, '#ffffff', PAL.sky[0]] }),
+    onBurst: () => {
+      if (fx) fx.play((THEME.fx && THEME.fx.intro) || 'burst', { colors: [PAL.accent, PAL.accent2, '#ffffff', PAL.sky[0]] });
+      if (THEME.id === 'christmas') sfx.bell();
+    },
   });
   await Promise.race([introDone, new Promise((r) => setTimeout(r, 24000))]);
   if (S.phase === 'intro' && S.run === run) stage.skipIntro();
@@ -521,6 +525,7 @@ function closeQuestion() {
 
 function showBoard() {
   S.phase = 'board';
+  if (fx) fx.clear();
   show('scr-board');
   stage.clearBubbles();
   const list = ranked();
@@ -592,6 +597,7 @@ async function showFinal() {
   save();
   stage.resetActors();
   stage.setMode('final');
+  if (fx) fx.clear();
   show('scr-final');
   frameStage(1);
   music.play('winner', { restart: true });
@@ -635,7 +641,7 @@ async function showFinal() {
   sfx.drumroll(2.4); await wait(2600); nodes[0].classList.add('show');
   sfx.fanfare(); if (isLegacy()) sfx.laugh(4);
   confetti($('confetti'), { duration: 9000 });
-  if (!isLegacy()) fx.play(THEME.fx.good === 'confetti' ? 'burst' : THEME.fx.good, { colors: [PAL.accent, PAL.accent2, '#ffffff'] });
+  if (!isLegacy()) { fx.clear(); fx.play(THEME.fx.final || 'burst', { colors: [PAL.accent, PAL.accent2, '#ffffff'], y: 0.35 }); }
   rest.classList.toggle('show', list.length > 3);
 }
 
@@ -812,6 +818,8 @@ async function boot() {
     const { HubStage } = await import('./hubstage.js');
     stage = new HubStage($('stage'));
     await stage.load(THEME.id, PAL.id, bar);
+    stage.signAt = 'front';   // waiting room: the greeting stands in front of the hub, below the players' names
+    stage.setGreeting(greetingOf(quizDoc), THEME.id);
   }
   window.__stage = stage;
   $('btn-start').disabled = false;

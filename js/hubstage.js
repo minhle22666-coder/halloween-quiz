@@ -9,7 +9,9 @@
 // ============================================================
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { THEMES, getTheme, getPalette } from './themes.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { THEMES, getTheme, getPalette, skyOf } from './themes.js';
+import { HubDeco } from './hubdeco.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const ease = {
@@ -19,8 +21,9 @@ const ease = {
   linear: (t) => t,
 };
 const gltfCache = new Map();
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);   // the new hubs are meshopt-compressed
 function loadGltf(url) {
-  if (!gltfCache.has(url)) gltfCache.set(url, new GLTFLoader().loadAsync(url));
+  if (!gltfCache.has(url)) gltfCache.set(url, loader.loadAsync(url));
   return gltfCache.get(url);
 }
 
@@ -108,7 +111,10 @@ export class HubStage {
     this.sun.position.set(18, 30, 14);
     this.fill = new THREE.DirectionalLight(0xbfd4ff, 0.6);
     this.fill.position.set(-20, 10, -16);
-    this.scene.add(this.hemi, this.sun, this.fill);
+    // warm glow of the lanterns on night hubs
+    this.warm = new THREE.PointLight(0xffa85a, 0, 30, 1.6);
+    this.scene.add(this.hemi, this.sun, this.fill, this.warm);
+    this.light0 = { hemi: 1.25, sun: 2.2, warm: 0 };
   }
 
   _buildMascot() {
@@ -120,6 +126,47 @@ export class HubStage {
     this.mascotState = { hop: 0, spin: 0, shake: 0, sad: 0, size: 2.3 };
     this.scene.add(this.mascot);
   }
+  /** the big greeting written in the sky ("Happy New Year 2027"…) — '' hides it */
+  setGreeting(text, theme) {
+    this.signText = String(text || '').trim();
+    this.signTheme = theme || this.signTheme;
+    if (!this.sign) {
+      this.sign = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: false, fog: false }));
+      this.sign.renderOrder = 8; this.sign.visible = false; this.signK = 0; this.signAspect = 0.25;
+      this.scene.add(this.sign);
+    }
+    if (!this.signText) return;
+    const t = getTheme(this.signTheme), txt = this.signText, my = (this._signSeq = (this._signSeq || 0) + 1);
+    const draw = () => {
+      if (my !== this._signSeq) return;
+      const c = document.createElement('canvas'), g = c.getContext('2d');
+      const font = (px) => `${t.fonts.titleWeight || 700} ${px}px ${t.fonts.title}`;
+      let px = 150; g.font = font(px);
+      const wMax = 1900;
+      while (g.measureText(txt).width > wMax && px > 50) { px -= 6; g.font = font(px); }
+      const w = Math.min(2048, Math.ceil(g.measureText(txt).width + 120)), h = Math.ceil(px * 1.6);
+      c.width = w; c.height = h;
+      g.font = font(px); g.textAlign = 'center'; g.textBaseline = 'middle';
+      const y = h * 0.52;
+      g.lineJoin = 'round';
+      g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = px * 0.18; g.shadowOffsetY = px * 0.06;
+      g.lineWidth = px * 0.16; g.strokeStyle = t.id === 'lunar' ? '#8c0a1f' : t.id === 'christmas' ? '#0c4a2f' : '#1d0f38';
+      g.strokeText(txt, w / 2, y);
+      g.shadowColor = 'transparent';
+      const gr = g.createLinearGradient(0, y - px / 2, 0, y + px / 2);
+      gr.addColorStop(0, '#fff6c8'); gr.addColorStop(0.55, '#ffd34d'); gr.addColorStop(1, '#f59e0b');
+      g.fillStyle = t.id === 'christmas' ? '#ffffff' : gr;
+      g.fillText(txt, w / 2, y);
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+      if (this.sign.material.map) this.sign.material.map.dispose();
+      this.sign.material.map = tex; this.sign.material.needsUpdate = true;
+      this.signAspect = h / w;
+    };
+    draw();
+    // draw again once the theme font has arrived
+    if (document.fonts && document.fonts.load) document.fonts.load(`${t.fonts.titleWeight || 700} 80px ${t.fonts.title.split(',')[0]}`, txt).then(draw, () => {});
+  }
+
   setMascotSprite(url) {
     if (!url) { this.mascotUrl = null; this.mascot.visible = false; return; }
     if (this.mascotUrl === url) return;
@@ -135,6 +182,11 @@ export class HubStage {
   /** load + build the hub of a theme (cached) */
   async loadHub(themeId) {
     if (this.hubs[themeId]) return this.hubs[themeId];
+    if (this._loading && this._loading[themeId]) return this._loading[themeId];
+    this._loading = this._loading || {};
+    return (this._loading[themeId] = this._buildHub(themeId));
+  }
+  async _buildHub(themeId) {
     const t = getTheme(themeId);
     const cfg = t.hub;
     const g = await loadGltf(cfg.file);
@@ -177,12 +229,18 @@ export class HubStage {
     // world around it
     items.ground = this._makeGround(cfg, s);
     if (items.ground) group.add(items.ground);
-    items.extras = this._makeExtras(themeId, cfg);
+    items.extras = this._makeExtras(themeId, cfg, items);
     if (items.extras) group.add(items.extras);
     group.visible = false;
     this.scene.add(group);
-    this.hubs[themeId] = { group, cfg, items, theme: t, radius: cfg.size / 2 };
-    return this.hubs[themeId];
+    model.updateMatrixWorld(true);
+    const top = new THREE.Box3().setFromObject(model).max.y;
+    const H = { group, cfg, items, theme: t, radius: cfg.size / 2, top };
+    // living decorations (petals, snow, moon, lanterns, the deer, Santa…)
+    H.deco = new HubDeco(this, H, loadGltf);
+    await H.deco.build();
+    this.hubs[themeId] = H;
+    return H;
   }
 
   _makeGround(cfg) {
@@ -197,24 +255,25 @@ export class HubStage {
       m.userData.water = true;
       return m;
     }
-    if (cfg.ground === 'grass' || cfg.ground === 'night') {
+    if (cfg.ground === 'grass' || cfg.ground === 'night' || cfg.ground === 'snow' || cfg.ground === 'stone') {
       const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(cfg.groundColor), roughness: 1, transparent: true, alphaMap: radialAlpha(), depthWrite: false });
       const m = new THREE.Mesh(new THREE.CircleGeometry((cfg.size / 2) * (cfg.groundSpread || 1.3), 64), mat);
       m.rotation.x = -Math.PI / 2;
-      m.position.y = cfg.ground === 'grass' ? -0.05 : 0.02;
+      m.position.y = cfg.ground === 'night' ? 0.02 : -0.05;
+      if (cfg.ground === 'snow') { mat.roughness = 0.85; mat.emissive = new THREE.Color(0x9fb4d8); mat.emissiveIntensity = 0.18; }
       m.renderOrder = -1;
       return m;
     }
     return null;
   }
 
-  _makeExtras(themeId, cfg) {
+  _makeExtras(themeId, cfg, items) {
     if (this.snapshot) return null;
     const g = new THREE.Group();
     const R = cfg.size / 2;
-    if (themeId === 'lunar') {
-      // soft clouds below + lanterns drifting up in the distance
-      const cloud = new THREE.SpriteMaterial({ map: cloudTexture(), transparent: true, depthWrite: false, opacity: 0.9 });
+    if (cfg.ground === 'clouds') {
+      // soft clouds below the floating island
+      const cloud = new THREE.SpriteMaterial({ map: cloudTexture(), transparent: true, depthWrite: false, opacity: cfg.night ? 0.55 : 0.9, color: cfg.night ? 0x8d88c0 : 0xffffff });
       for (let i = 0; i < 14; i++) {
         const s = new THREE.Sprite(cloud);
         const a = (i / 14) * Math.PI * 2, r = R * (1.1 + Math.random() * 1.4);
@@ -222,36 +281,40 @@ export class HubStage {
         const k = R * (0.9 + Math.random() * 0.8); s.scale.set(k * 1.8, k, 1);
         g.add(s);
       }
+    }
+    if (cfg.lanterns) {
+      // red lanterns drifting up in the distance
       const lanternMat = new THREE.SpriteMaterial({ map: lanternTexture(), transparent: true, depthWrite: false, fog: false });
-      this.lanterns = [];
+      items.lanterns = [];
       for (let i = 0; i < 26; i++) {
         const s = new THREE.Sprite(lanternMat);
         const a = Math.random() * Math.PI * 2, r = R * (2.4 + Math.random() * 3);
         s.position.set(Math.cos(a) * r, -R + Math.random() * R * 3, Math.sin(a) * r);
         const k = 0.9 + Math.random() * 0.8; s.scale.set(k, k * 1.25, 1);
         s.userData = { v: 0.4 + Math.random() * 0.5, ph: Math.random() * 6, top: R * 2.2, bottom: -R * 1.2 };
-        g.add(s); this.lanterns.push(s);
+        g.add(s); items.lanterns.push(s);
       }
-    } else if (themeId === 'summer') {
+    }
+    if (themeId === 'summer') {
       const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(255,250,220,1)', 'rgba(255,220,120,0)'), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
       sun.position.set(-R * 6, R * 3.2, -R * 9); sun.scale.set(R * 3.2, R * 3.2, 1);
       g.add(sun);
       const cloud = new THREE.SpriteMaterial({ map: cloudTexture(), transparent: true, depthWrite: false, fog: false, opacity: 0.85 });
-      this.clouds = [];
+      items.clouds = [];
       for (let i = 0; i < 8; i++) {
         const s = new THREE.Sprite(cloud);
         const a = (i / 8) * Math.PI * 2 + Math.random(), r = R * (6 + Math.random() * 3);
         s.position.set(Math.cos(a) * r, R * (1.6 + Math.random() * 1.5), Math.sin(a) * r);
         const k = R * (1.4 + Math.random()); s.scale.set(k * 2, k, 1);
-        g.add(s); this.clouds.push(s);
+        g.add(s); items.clouds.push(s);
       }
     } else if (themeId === 'default') {
       // floating sparkles
       const n = 160, pos = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, r = R * (1.2 + Math.random() * 3); pos.set([Math.cos(a) * r, Math.random() * R * 1.6, Math.sin(a) * r], i * 3); }
       const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      this.sparkles = new THREE.Points(geo, new THREE.PointsMaterial({ map: glowTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)'), size: 0.5, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 }));
-      g.add(this.sparkles);
+      items.sparkles = new THREE.Points(geo, new THREE.PointsMaterial({ map: glowTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)'), size: 0.5, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 }));
+      g.add(items.sparkles);
     }
     return g;
   }
@@ -260,7 +323,8 @@ export class HubStage {
   setPalette(themeId, paletteId) {
     const t = getTheme(themeId);
     const p = getPalette(t, paletteId);
-    const top = new THREE.Color(p.sky[0]), bottom = new THREE.Color(p.sky[1]);
+    const sky = skyOf(t, p);
+    const top = new THREE.Color(sky[0]), bottom = new THREE.Color(sky[1]);
     this.skyMat.uniforms.top.value.copy(top);
     this.skyMat.uniforms.bottom.value.copy(bottom);
     this.skyMat.uniforms.glow.value.set(p.accent2);
@@ -271,9 +335,15 @@ export class HubStage {
     this.fogNear = R * (t.hub.ground === 'ocean' ? 2.5 : 3);
     this.fogFar = R * (t.hub.ground === 'ocean' ? 9 : 12);
     this.fog.near = this.fogNear; this.fog.far = this.fogFar;
-    this.hemi.color.set(themeId === 'lunar' ? 0xfff0e0 : 0xffffff);
-    this.hemi.groundColor.copy(bottom).lerp(new THREE.Color(0x777777), 0.5);
-    this.sun.color.set(themeId === 'summer' ? 0xfff2d6 : themeId === 'lunar' ? 0xffe2c0 : 0xffffff);
+    const night = !!t.hub.night;
+    this.hemi.color.set(night ? 0xb9c4ff : themeId === 'lunar' ? 0xfff0e0 : themeId === 'christmas' ? 0xf2f6ff : 0xffffff);
+    this.hemi.groundColor.copy(bottom).lerp(new THREE.Color(night ? 0x2a2440 : 0x777777), 0.5);
+    this.sun.color.set(night ? 0xc8d2ff : themeId === 'summer' ? 0xfff2d6 : themeId === 'lunar' ? 0xffe2c0 : 0xffffff);
+    this.light0 = { hemi: night ? 1.0 : 1.25, sun: night ? 1.25 : 2.2, warm: night ? 26 : 0 };
+    this.hemi.intensity = this.light0.hemi; this.sun.intensity = this.light0.sun;
+    this.warm.intensity = this.light0.warm;
+    this.warm.position.set(0, R * 0.55, 0);
+    this.warm.distance = R * 3.2;
     this.palette = p;
   }
 
@@ -388,9 +458,28 @@ export class HubStage {
     const R = H.radius, cfg = H.cfg;
     // world life
     if (H.items.ground && H.items.ground.userData.water) { const m = H.items.ground.material.map; m.offset.x = this.t * 0.012; m.offset.y = this.t * 0.007; }
-    if (this.lanterns && this.themeId === 'lunar') for (const l of this.lanterns) { l.position.y += l.userData.v * dt; l.position.x += Math.sin(this.t * 0.5 + l.userData.ph) * 0.004; if (l.position.y > l.userData.top) l.position.y = l.userData.bottom; }
-    if (this.clouds && this.themeId === 'summer') for (const c of this.clouds) { c.position.x += dt * 0.25; }
-    if (this.sparkles && this.themeId === 'default') { this.sparkles.rotation.y += dt * 0.03; this.sparkles.material.opacity = 0.55 + Math.sin(this.t * 1.7) * 0.25; }
+    const I = H.items;
+    if (I.lanterns) for (const l of I.lanterns) { l.position.y += l.userData.v * dt; l.position.x += Math.sin(this.t * 0.5 + l.userData.ph) * 0.004; if (l.position.y > l.userData.top) l.position.y = l.userData.bottom; }
+    if (I.clouds) for (const c of I.clouds) { c.position.x += dt * 0.25; }
+    if (I.sparkles) { I.sparkles.rotation.y += dt * 0.03; I.sparkles.material.opacity = 0.55 + Math.sin(this.t * 1.7) * 0.25; }
+    if (H.deco) H.deco.update(dt);
+    if (this.warm.intensity > 0) this.warm.intensity = this.light0.warm * (0.92 + Math.sin(this.t * 3.1) * 0.05 + Math.sin(this.t * 7.3) * 0.03);
+    // the greeting in the sky: in the waiting room and during the intro
+    if (this.sign) {
+      const on = !!this.signText && !!H.cfg && H.theme.greeting != null && (this.mode === 'lobby' || this.introOn);
+      this.signK += ((on ? 1 : 0) - this.signK) * Math.min(1, dt * 4);
+      this.sign.visible = this.signK > 0.01;
+      if (this.sign.visible) {
+        this.sign.material.opacity = this.signK;
+        const w = R * (this.signAt === 'front' && this.mode === 'lobby' ? 1.75 : 2.3) * (this.camK > 1 ? 1.05 : 1);
+        this.sign.scale.set(w, w * this.signAspect, 1);
+        if (this.signAt === 'front' && this.mode === 'lobby') {
+          // standing in front of the hub, facing the camera
+          const d = V(this.camera.position.x - H.group.position.x, 0, this.camera.position.z - H.group.position.z).normalize();
+          this.sign.position.set(H.group.position.x + d.x * R * 1.05, R * 0.25 + Math.sin(this.t * 0.9) * 0.1, H.group.position.z + d.z * R * 1.05);
+        } else this.sign.position.set(H.group.position.x, cfg.lookY + (cfg.signY ?? cfg.camDist * 0.27) + Math.sin(this.t * 0.9) * 0.15, H.group.position.z);
+      }
+    }
     if (cfg.floating) H.items.spin.position.y = Math.sin(this.t * 0.8) * R * 0.03;
     if (H.items.clipPlane) H.items.clipPlane.constant = -(H.items.clipY + H.items.spin.position.y); // the cut follows the hub when it hops
     // camera orbit
@@ -459,7 +548,7 @@ export class HubStage {
     const H = this.current;
     if (H) { H.items.spin.position.set(0, 0, 0); H.items.spin.rotation.set(0, 0, 0); H.items.spin.scale.set(1, 1, 1); }
     Object.assign(this.mascotState, { hop: 0, spin: 0, shake: 0, sad: 0 });
-    this.hemi.intensity = 1.25; this.sun.intensity = 2.2;
+    this.hemi.intensity = this.light0.hemi; this.sun.intensity = this.light0.sun;
     this.camLift = 0;
   }
 
@@ -468,18 +557,23 @@ export class HubStage {
     this.resetActors();
     const my = ++this.seq;
     this.setMode('game');
+    this.introOn = true;
     const z0 = this.zoom, a0 = this.orbit;
     this.mascot.visible = false;
+    const deco = this.current && this.current.deco;
+    const santa = deco && deco.santa ? deco.fly('intro') : null;   // Christmas: Santa's sleigh circles the tree
     await this.tween(3.2, (k) => { this.zoom = 2.6 - (2.6 - z0) * k; this.camLift = (1 - k) * 18; this.orbit = a0 + k * 1.1; }, 'inOut');
-    if (my !== this.seq) return;
+    if (my !== this.seq) { this.introOn = false; return; }
     cb.onHall && cb.onHall();
     cb.onBurst && cb.onBurst();
     await this._hop(0.9);
+    if (santa) await Promise.race([santa, this.wait(4)]);
+    this.introOn = false;
     if (my !== this.seq) return;
     this.mascot.visible = !!this.mascotUrl;
     await this.wait(0.8);
   }
-  skipIntro() { this.resetActors(); this.setMode('game'); this.zoom = 0.86; this.camLift = 0; }
+  skipIntro() { this.resetActors(); this.introOn = false; this.setMode('game'); this.zoom = 0.86; this.camLift = 0; }
 
   /** ~2.4 s: swing around the hub to a new viewpoint for the next question */
   async walkTo(i, sfx = {}) {
@@ -512,6 +606,7 @@ export class HubStage {
     const my = this.seq;
     const S = this.current.items.spin;
     this.mascotSay(['Woohoo! 🎉', 'Nailed it! ✨', 'Yes!! 🙌'][Math.floor(Math.random() * 3)], 2, 'good');
+    if (this.current.deco) this.current.deco.react(true);
     await Promise.all([
       this.tween(1.4, (k) => { S.rotation.y = k * Math.PI * 2; this.mascotState.spin = k * Math.PI * 2; }, 'inOut'),
       (async () => { await this._hop(0.6, 1.2); if (my === this.seq) await this._hop(0.5, 0.7); })(),
@@ -528,10 +623,12 @@ export class HubStage {
     this.shake = 0.6;
     this.mascotState.shake = 1;
     this.mascotSay(['Oh no… 😵', 'Nooo! 😫', 'Oops… 😬'][Math.floor(Math.random() * 3)], 2, 'shout');
+    if (this.current.deco) this.current.deco.react(false);
+    const L = this.light0;
     await this.tween(1.1, (k, raw) => {
       S.rotation.z = Math.sin(raw * 40) * 0.025 * (1 - raw);
-      this.hemi.intensity = 1.25 - Math.sin(raw * Math.PI) * 0.7;
-      this.sun.intensity = 2.2 - Math.sin(raw * Math.PI) * 1.4;
+      this.hemi.intensity = L.hemi * (1 - Math.sin(raw * Math.PI) * 0.56);
+      this.sun.intensity = L.sun * (1 - Math.sin(raw * Math.PI) * 0.64);
       this.mascotState.sad = Math.min(1, raw * 2);
     }, 'linear');
     if (my !== this.seq) return;

@@ -36,7 +36,7 @@ Push toàn bộ thư mục lên GitHub (kéo thả "uploading an existing file" 
   **Sort**: *Last edited* · *Date created* · *A–Z* (bấm lần nữa để đảo chiều; nhớ lựa chọn).
   **▶ Play** = mở màn chiếu với PIN + QR mới · **👁** xem demo (màn chiếu + điện thoại tự chạy qua các câu) · **✏️** sửa · **⧉** nhân bản · **🗑** xoá (có hỏi lại).
 - **＋ Create quiz** → *Studio*:
-  1. **🎨 Theme** — hub 3D xoay, **vuốt trái/phải** (hoặc ‹ ›, phím ←/→, hay bấm tên theme) để đổi theme; chọn **1 trong 5 màu** (Purple, Sky Blue, Sunset, Forest, Ruby Red — dùng được cho mọi theme, đổi theme vẫn giữ màu đã chọn); sửa **Title** và **Subtitle**; chọn **nhạc nền** (▶ nghe thử). Font do theme quyết định.
+  1. **🎨 Theme** — hub 3D xoay, **vuốt trái/phải** (hoặc ‹ ›, phím ←/→, hay bấm tên theme) để đổi theme; chọn **1 trong 4 màu** (Purple, Sky Blue, Forest, Ruby Red — dùng được cho mọi theme, đổi theme vẫn giữ màu đã chọn); sửa **Title**, **Subtitle** và (theme New Year / Christmas / Mid-Autumn) **chữ chào trên bầu trời 3D** — ví dụ "Happy New Year 2027", sang năm đổi số năm là xong; chọn **nhạc nền** (▶ nghe thử). Font do theme quyết định.
   2. **❓ Questions** — bên trái soạn câu, bên phải là **Live preview**: màn chiếu + điện thoại hiện đúng câu đang chọn theo theme/màu/font (bấm *Question · Answers · ✓ Right · ✗ Wrong* hoặc **▶ Play** để xem chạy thử cả hiệu ứng).
      Mỗi câu có **2–4 đáp án** (＋ Add answer / ✕ xoá bớt), bấm **✓** cạnh đáp án đúng; countdown riêng (gõ số giây, mặc định 20s; "Apply to all" cho mọi câu); ảnh/GIF/video tuỳ chọn. Thêm / nhân bản / xoá / đổi thứ tự câu (tối đa 200). Câu chưa điền đủ vẫn lưu được, chỉ bị bỏ qua khi chơi.
   3. **💾 Save** hoặc **▶ Play** (tự lưu rồi mở màn chiếu).
@@ -49,12 +49,17 @@ Push toàn bộ thư mục lên GitHub (kéo thả "uploading an existing file" 
 | **Classic** (mặc định) | Baloo 2 + Be Vietnam Pro | Đảo cỏ, tượng & cột đá | 🎉 Pháo giấy + lấp lánh, hub nhảy xoay | 🌧️ Mây mưa, đèn tối, avatar ủ rũ | Go to the Picnic |
 | **Summer** | Pacifico + Nunito | Nhà gỗ trên bãi biển, biển vô tận | ☀️ Mặt trời toả nắng + bóng biển nảy | 🌊 Con sóng lớn ập qua màn hình | 64 Sundays |
 | **Halloween** | Creepster + Fredoka | Nhà ma — **giữ nguyên trải nghiệm cũ** (intro sấm sét, hành lang ma, ma hù / khiên phép) | Ma bị thế lực bí ẩn chặn | Ma hù BOO! | 3 bài Halloween cũ |
-| **Lunar New Year** | Lobster + Be Vietnam Pro | Đảo bay giữa mây + đèn lồng (đã bỏ con rồng, đảo được zoom to hơn) | 🎆 Pháo hoa + mưa lì xì & đồng vàng | 🧨 Pháo xịt "pfft…" | Deck the Halls |
+| **Happy New Year** | Lobster + Be Vietnam Pro | Đảo hoa đào bay giữa mây, cánh hoa rơi, đèn lồng, chữ **"Happy New Year 2027"** trên trời (sửa được) | 🎆 Show pháo hoa (hoa cúc, dải vàng, vòng) + lì xì, đồng vàng, hoa mai/đào rơi | 🧨 Pháo xịt "pfft…" | Silly Intro |
+| **Merry Christmas** *(mới)* | Dancing Script + Be Vietnam Pro | Cây thông + quà nhảy nhót + **tuần lộc** (có animation đứng/ăn cỏ), tuyết rơi, đèn nhấp nháy, chữ "Merry Christmas" | 🎁 Hộp quà rơi xuống bật nắp tung giấy màu + Santa bay ngang trời | ❄️ Ném tuyết "bộp" vào màn hình + bão tuyết, đèn cây tắt | Deck the Halls |
+| **Mid-Autumn** *(mới)* | Grandstander + Be Vietnam Pro | Thế giới bánh trung thu bay giữa mây đêm, **trăng tròn** sáng, sao, **đèn lồng thả bay** khắp trời | 🏮 Đèn lồng bay lên rực rỡ, trăng sáng hơn | 🌑 Mây đen che trăng, đèn lồng tắt rơi xuống | 64 Sundays |
+| **Japanese Restaurant** *(mới)* | M PLUS Rounded 1c + Be Vietnam Pro | Quán izakaya, dây **lồng đèn giấy** quanh quán, hoa anh đào rơi | 🍣 Mưa sushi + chữ "OISHII!" | 🥵 Wasabi cay xanh màn hình + khói + chữ "WASABI!" | Go to the Picnic |
+
+- **Intro Christmas**: camera bay từ trời xuống, **ông già Noel cưỡi xe tuần lộc bay vòng quanh cây thông** rồi vút lên trời (ở sảnh chờ thỉnh thoảng Santa cũng bay ngang). Các theme khác có pháo hoa / đèn lồng / sushi khi intro.
 
 - **Nhạc nền**: mỗi quiz chọn 1 bài, phát **xuyên suốt** từ sảnh chờ → câu hỏi → podium, không bị ngắt (Halloween vẫn là bộ 3 bài theo cảnh). Có lựa chọn *No music*. Chỉ màn chiếu phát nhạc, điện thoại im lặng.
 - Ô đáp án giữ 4 màu chuẩn Kahoot (đỏ/tím/vàng/xanh). Logo giữa QR = mascot **đầu bếp**.
 - **Màn chiếu**: khi hiện câu hỏi / đáp án / kết quả, hub 3D tự dịch vào khoảng trống giữa khung câu hỏi và các ô đáp án → mascot và hiệu ứng đúng/sai luôn nhìn thấy, không bị che.
-- **Điện thoại** (Classic/Summer/Lunar): hub **3D thật** giống màn chiếu. Vừa bấm *Join* → camera **xoay xoắn ốc + zoom** từ trên trời vào hub; mỗi câu mới camera lượn quanh hub; đúng thì hub nhảy xoay, sai thì hub rung + tối đèn. Câu thoại ("Nailed it!", "So close…") nằm **ngay dưới avatar**, không còn bong bóng. Máy không chạy được 3D tự dùng ảnh hub (zoom + xoay nhẹ).
+- **Điện thoại** (mọi theme trừ Halloween): hub **3D thật** giống màn chiếu. Vừa bấm *Join* → camera **xoay xoắn ốc + zoom** từ trên trời vào hub; mỗi câu mới camera lượn quanh hub; đúng thì hub nhảy xoay, sai thì hub rung + tối đèn. Câu thoại ("Nailed it!", "So close…") nằm **ngay dưới avatar**, không còn bong bóng. Máy không chạy được 3D tự dùng ảnh hub (zoom + xoay nhẹ).
 
 ## 5. Cách chơi (màn chiếu)
 
@@ -72,16 +77,17 @@ Tập dượt đông người: thêm `&bots=70` vào link màn chiếu.
 
 - Host là trọng tài; điện thoại chỉ gửi `join`/`ans` (qua REST, không nhân bản tới 79 máy). Heartbeat 3s mang theo phase + theme để máy rớt mạng tự đồng bộ.
 - Quiz chỉ đọc/ghi qua hàm có mã → người chơi không thể xem trước đáp án.
-- Hub 3D đã tối ưu (gộp mesh, texture WebP): Classic 0.2 MB, Summer 0.9 MB, Lunar 0.9 MB. Điện thoại tải hub trong lúc người chơi gõ tên; khi đang trả lời, cảnh 3D đứng yên để đỡ tốn pin.
+- Hub 3D đã tối ưu (gộp mesh, giảm tam giác, nén meshopt, texture WebP): Classic 0.2 MB, Summer 0.9 MB, New Year 0.14 MB, Christmas 0.14 MB (+ tuần lộc 0.1, Santa 0.17), Mid-Autumn 0.4 MB (từ 18 MB), Japanese 0.4 MB (từ 6 MB). Điện thoại tải hub trong lúc người chơi gõ tên; khi đang trả lời, cảnh 3D đứng yên để đỡ tốn pin.
 
 ## Cấu trúc
 
 ```
 index.html (quản trị)  host.html (màn chiếu)  play.html (người chơi)  control.html (remote)
 css/   common.css admin.css host.css play.css control.css
-js/    themes.js (4 theme, 5 màu, nhạc, chữ) · admin.js (thư viện + studio) · demo.js (live preview) · editor.js · quizstore.js
+js/    themes.js (7 theme, 4 màu, nhạc, chữ) · hubdeco.js (tuyết, cánh hoa, trăng, đèn lồng, tuần lộc, Santa) · admin.js (thư viện + studio) · demo.js (live preview) · editor.js · quizstore.js
        host.js · play.js · hubstage.js (hub 3D) · stage3d.js (Halloween) · fx.js (hiệu ứng 2D) · music.js · media.js · net.js · config.js
-assets/hubs/   default.glb summer.glb lunar.glb + ảnh preview *.webp
+assets/hubs/   default summer newyear christmas midautumn japan (.glb) + ảnh preview *.webp
+assets/models/ deer.glb santa.glb lantern.glb (+ Halloween)
 assets/models/ halloween.glb hallway(.lite).glb door.glb ghost.glb · avatars/
 assets/music/  picnic.mp3 sundays.mp3 deckhalls.mp3 silly.mp3 (+ waiting/ingame/winner.mp3 của Halloween)
 supabase/      setup.sql · media-setup.sql · quizzes.sql

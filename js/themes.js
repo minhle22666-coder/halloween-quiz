@@ -1,6 +1,6 @@
 // ============================================================
 //  BOS Quiz — themes
-//  Every quiz picks one theme, one of the 5 colour palettes (shared by all themes),
+//  Every quiz picks one theme, one of the 4 colour palettes (shared by all themes),
 //  a background music track, and can rename its title.
 //  - halloween keeps the original haunted-castle experience (3D intro, hallway, ghost)
 //  - the other themes use a rotating 3D "hub" and their own right/wrong effects
@@ -16,7 +16,7 @@ export const THEMES = {
     fonts: { title: "'Baloo 2', 'Be Vietnam Pro', sans-serif", body: "'Be Vietnam Pro', system-ui, sans-serif", titleWeight: 800, css: GF + 'Baloo+2:wght@600;800&family=Be+Vietnam+Pro:wght@400;500;600;700' },
     title: 'BOS Quiz', subtitle: "Let's play!",
     hub: { file: 'assets/hubs/default.glb', image: 'assets/hubs/default.webp', size: 21, baseTop: 0.3, ground: 'grass', groundColor: '#7fcf45', groundSpread: 1.22, camDist: 22, camHeight: 10, lookY: 1.4, mascotY: 2.2 },
-    fx: { good: 'confetti', bad: 'rain' },
+    fx: { good: 'confetti', bad: 'rain', final: 'burst' },
     palette: 'purple', music: 'picnic',
     copy: {
       intro: 'Get ready!', walk: 'Next question coming up…', good: (p) => `<b>${p}%</b> of players got it right! 🎉`, bad: (p) => `<b>${p}%</b> of players missed it! 🌧️`,
@@ -30,7 +30,7 @@ export const THEMES = {
     fonts: { title: "'Pacifico', cursive", body: "'Nunito', system-ui, sans-serif", titleWeight: 400, css: GF + 'Pacifico&family=Nunito:wght@400;600;700;800;900' },
     title: 'BOS Quiz', subtitle: 'Summer Splash',
     hub: { file: 'assets/hubs/summer.glb', image: 'assets/hubs/summer.webp', size: 17, baseTop: 1.95, clip: 1.9, hide: ['Water'], ground: 'ocean', groundColor: '#1560b0', camDist: 24, camHeight: 11, lookY: 2.2, mascotY: 2.6 },
-    fx: { good: 'beach', bad: 'wave' },
+    fx: { good: 'beach', bad: 'wave', final: 'beach' },
     palette: 'sky', music: 'sundays',
     copy: {
       intro: "Surf's up — let's play!", walk: 'Catching the next wave…', good: (p) => `<b>${p}%</b> of players got it right! ☀️`, bad: (p) => `<b>${p}%</b> of players got splashed! 🌊`,
@@ -52,33 +52,75 @@ export const THEMES = {
     },
   },
 
-  lunar: {
-    id: 'lunar', name: 'Lunar New Year', label: 'Happy Lunar Year',
-    blurb: 'Red & gold, a floating island in the clouds — fireworks and lucky envelopes for right answers.',
+  lunar: {   // id kept as "lunar" so older quizzes keep working
+    id: 'lunar', name: 'Happy New Year', label: 'Happy New Year',
+    blurb: 'A cherry-blossom island floating in the clouds — fireworks, lucky envelopes and a big greeting in the sky.',
     fonts: { title: "'Lobster', 'Be Vietnam Pro', cursive", body: "'Be Vietnam Pro', system-ui, sans-serif", titleWeight: 400, css: GF + 'Lobster&family=Be+Vietnam+Pro:wght@400;500;600;700;800' },
-    title: 'BOS Quiz', subtitle: 'Happy Lunar New Year',
-    hub: { file: 'assets/hubs/lunar.glb', image: 'assets/hubs/lunar.webp', size: 13, fit: { cx: -81, cy: 299, cz: 61, size: 380 }, glow: { White: 0.55 }, floating: true, ground: 'clouds', camDist: 19, camHeight: 9, lookY: -0.4, mascotY: 1.9 },
-    fx: { good: 'fireworks', bad: 'fizzle' },
-    palette: 'ruby', music: 'deckhalls',
+    title: 'BOS Quiz', subtitle: 'Happy New Year', greeting: 'Happy New Year 2027',
+    hub: { file: 'assets/hubs/newyear.glb', image: 'assets/hubs/newyear.webp', size: 14, fit: { cx: -0.21, cy: 0, cz: 1.1, size: 21.1 }, floating: true, ground: 'clouds', camDist: 18, camHeight: 8.5, lookY: 1.8, mascotY: 2.2, petals: true, lanterns: true },
+    fx: { good: 'fireworks', bad: 'fizzle', intro: 'fireworks', final: 'fireworks' },
+    palette: 'ruby', music: 'silly',
     copy: {
       intro: 'Happy New Year — let’s play!', walk: 'A lucky question is coming…', good: (p) => `<b>${p}%</b> of players got it right! 🧧`, bad: (p) => `<b>${p}%</b> of players missed the luck! 🧨`,
       final: 'Lucky Winners', correct: 'Correct!', wrong: 'Oh no! Wrong', timeout: "Time's up!", goodLine: 'Lucky money! 🧧', badLine: 'Fizzled out… 💨',
     },
   },
-};
-export const THEME_ORDER = ['default', 'summer', 'halloween', 'lunar'];
 
-// ---- 5 colour palettes, the same for every theme ----
+  christmas: {
+    id: 'christmas', name: 'Merry Christmas', label: 'Christmas',
+    blurb: 'A Christmas tree, presents and a giant reindeer in the snow — Santa flies his sleigh around the tree!',
+    fonts: { title: "'Dancing Script', 'Be Vietnam Pro', cursive", body: "'Be Vietnam Pro', system-ui, sans-serif", titleWeight: 700, css: GF + 'Dancing+Script:wght@700&family=Be+Vietnam+Pro:wght@400;500;600;700;800' },
+    title: 'BOS Quiz', subtitle: 'Merry Christmas', greeting: 'Merry Christmas',
+    hub: { file: 'assets/hubs/christmas.glb', image: 'assets/hubs/christmas.webp', size: 11.5, fit: { cx: 12.3, cy: 0, cz: -18.9, size: 466 }, ground: 'snow', groundColor: '#f4f8ff', groundSpread: 1.7, camDist: 22, camHeight: 9, lookY: 3.2, mascotY: 2.4, snow: true, gifts: true, twinkle: true, santa: true,
+      props: [{ file: 'assets/models/deer.glb', at: [0.36, -0.24], height: 2.2, face: -0.6, anims: ['idle1', 'eat', 'idle2'] }] },
+    fx: { good: 'gifts', bad: 'snowball', intro: 'snow', final: 'gifts' },
+    palette: 'sky', music: 'deckhalls',
+    copy: {
+      intro: 'Ho ho ho — let’s play!', walk: 'Santa is bringing the next question…', good: (p) => `<b>${p}%</b> of players got it right! 🎁`, bad: (p) => `<b>${p}%</b> of players got snowballed! ❄️`,
+      final: 'Christmas Stars', correct: 'Correct!', wrong: 'Brrr! Wrong', timeout: "Time's up!", goodLine: 'Ho ho ho! 🎁', badLine: 'Snowballed… ❄️',
+    },
+  },
+
+  midautumn: {
+    id: 'midautumn', name: 'Mid-Autumn', label: 'Mid-Autumn Festival',
+    blurb: 'A mooncake world under the full moon — glowing lanterns float up into the night sky.',
+    fonts: { title: "'Grandstander', 'Be Vietnam Pro', sans-serif", body: "'Be Vietnam Pro', system-ui, sans-serif", titleWeight: 800, css: GF + 'Grandstander:wght@700;800;900&family=Be+Vietnam+Pro:wght@400;500;600;700;800' },
+    title: 'BOS Quiz', subtitle: 'Mid-Autumn Festival', greeting: 'Happy Mid-Autumn',
+    hub: { file: 'assets/hubs/midautumn.glb', image: 'assets/hubs/midautumn.webp', size: 15, fit: { cx: 10, cy: 4066, cz: 0, size: 29520 }, night: true, floating: true, ground: 'clouds', glow: { Black_Walnut_Wood_Rough: 0.6, '13000': 0.25 }, camDist: 22, camHeight: 9, lookY: 2.4, mascotY: 2.2, moon: true, skyLanterns: true, stars: true },
+    fx: { good: 'lanterns', bad: 'eclipse', intro: 'lanterns', final: 'lanterns' },
+    palette: 'purple', music: 'sundays',
+    copy: {
+      intro: 'The full moon is rising — let’s play!', walk: 'Follow the lanterns…', good: (p) => `<b>${p}%</b> of players got it right! 🏮`, bad: (p) => `<b>${p}%</b> of players lost in the dark! 🌑`,
+      final: 'Moonlight Champions', correct: 'Correct!', wrong: 'Oh no! Wrong', timeout: "Time's up!", goodLine: 'Shining bright! 🏮', badLine: 'The moon hid away… 🌑',
+    },
+  },
+
+  japan: {
+    id: 'japan', name: 'Japanese Restaurant', label: 'Japanese',
+    blurb: 'A cosy izakaya with paper lanterns and falling sakura — sushi rains on right answers, wasabi burns on wrong ones!',
+    fonts: { title: "'M PLUS Rounded 1c', 'Be Vietnam Pro', sans-serif", body: "'Be Vietnam Pro', system-ui, sans-serif", titleWeight: 800, css: GF + 'M+PLUS+Rounded+1c:wght@500;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700;800' },
+    title: 'BOS Quiz', subtitle: 'Irasshaimase!',
+    hub: { file: 'assets/hubs/japan.glb', image: 'assets/hubs/japan.webp', size: 12, fit: { cx: -0.03, cy: 0.16, cz: -0.85, size: 17.25 }, ground: 'stone', groundColor: '#8f9a8a', groundSpread: 1.5, camDist: 21, camHeight: 9, lookY: 3.2, mascotY: 2.1, petals: true, paperLanterns: true },
+    fx: { good: 'sushi', bad: 'wasabi', intro: 'sakura', final: 'sakura' },
+    palette: 'purple', music: 'picnic',
+    copy: {
+      intro: 'Irasshaimase — let’s play!', walk: 'The chef is preparing the next question…', good: (p) => `<b>${p}%</b> of players got it right! 🍣`, bad: (p) => `<b>${p}%</b> of players got a mouthful of wasabi! 🥵`,
+      final: 'Master Chefs', correct: 'Oishii! Correct', wrong: 'Wasabi! Wrong', timeout: "Time's up!", goodLine: 'Oishii! 🍣', badLine: 'Too spicy… 🥵',
+    },
+  },
+};
+export const THEME_ORDER = ['default', 'japan', 'lunar', 'summer', 'midautumn', 'halloween', 'christmas'];
+
+// ---- 4 colour palettes, the same for every theme ----
 export const PALETTES = [
   // sky = [top of the sky, horizon]
   { id: 'purple', name: 'Purple', sky: ['#2c1278', '#9466f5'], accent: '#ffb703', accent2: '#ffd166', panel: '#22104c', text: '#ffffff' },
   { id: 'sky', name: 'Sky Blue', sky: ['#1b86db', '#bff0ff'], accent: '#ff7043', accent2: '#ffd54f', panel: '#0b4466', text: '#ffffff' },
-  { id: 'sunset', name: 'Sunset', sky: ['#a01f5c', '#ffb06a'], accent: '#ffe066', accent2: '#fff1b0', panel: '#5a1235', text: '#ffffff' },
   { id: 'forest', name: 'Forest', sky: ['#0c5a3f', '#8adca2'], accent: '#fde047', accent2: '#fef08a', panel: '#0a3326', text: '#ffffff' },
   { id: 'ruby', name: 'Ruby Red', sky: ['#8c0a1f', '#ff7448'], accent: '#ffcc33', accent2: '#ffe28a', panel: '#560715', text: '#ffffff' },
 ];
 // palettes of older quizzes → the new ones
-const OLD_PALETTES = { grape: 'purple', ocean: 'sky', mint: 'forest', coral: 'sunset', tropical: 'sky', lagoon: 'sky', haunted: 'purple', bloodmoon: 'ruby', toxic: 'forest', redgold: 'ruby', blossom: 'sunset', jade: 'forest' };
+const OLD_PALETTES = { grape: 'purple', ocean: 'sky', mint: 'forest', coral: 'ruby', sunset: 'ruby', tropical: 'sky', lagoon: 'sky', haunted: 'purple', bloodmoon: 'ruby', toxic: 'forest', redgold: 'ruby', blossom: 'ruby', jade: 'forest' };
 
 // ---- background music (plays all the way through: lobby → questions → podium) ----
 export const MUSIC = {
@@ -106,6 +148,21 @@ export function getPalette(theme, pid) {
   const t = typeof theme === 'string' ? getTheme(theme) : theme;
   pid = OLD_PALETTES[pid] || pid;
   return PALETTES.find((p) => p.id === pid) || PALETTES.find((p) => p.id === t.palette) || PALETTES[0];
+}
+
+/** the sky of a theme with a palette: [top, horizon] (night themes darken the palette's sky) */
+export function skyOf(theme, palette) {
+  const t = typeof theme === 'string' ? getTheme(theme) : theme;
+  const p = palette && palette.sky ? palette : getPalette(t, palette);
+  if (t.hub && t.hub.night) return [mix(p.sky[0], '#030414', 0.74), mix(p.sky[1], '#1b1440', 0.66)];
+  return p.sky;
+}
+/** the greeting written in the sky of the 3D scene ('' = none) */
+export function greetingOf(quiz) {
+  const t = getTheme(quiz && quiz.theme);
+  if (!t.greeting) return '';
+  const g = quiz && quiz.settings && quiz.settings.greeting;
+  return typeof g === 'string' ? g.trim().slice(0, 40) : t.greeting;
 }
 
 // colour helpers
@@ -139,8 +196,9 @@ export function applyTheme(themeId, paletteId, root = document.documentElement) 
   s.setProperty('--accent', p.accent);
   s.setProperty('--accent2', p.accent2);
   s.setProperty('--accent-ink', isLight(p.accent) ? '#2a1200' : '#ffffff');
-  s.setProperty('--sky1', p.sky[0]);
-  s.setProperty('--sky2', p.sky[1]);
+  const sky = skyOf(t, p);
+  s.setProperty('--sky1', sky[0]);
+  s.setProperty('--sky2', sky[1]);
   s.setProperty('--panel', rgba(p.panel, 0.82));
   s.setProperty('--panel-solid', p.panel);
   s.setProperty('--line', rgba(mix(p.accent2, '#ffffff', 0.5), 0.25));

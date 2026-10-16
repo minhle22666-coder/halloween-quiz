@@ -47,7 +47,9 @@ let fx = null;
 let booted = false;
 const H3 = { stage: null, state: 'off', key: '', entered: false, freezeT: 0 };   // the 3D hub (non-Halloween themes)
 const isLegacy = () => !!THEME.legacy3d;
-function setTheme(id, pal, title, sub) {
+let GREET = '';
+function setTheme(id, pal, title, sub, greeting) {
+  if (greeting != null && greeting !== GREET) { GREET = greeting; if (H3.stage) H3.stage.setGreeting(GREET, id); }
   const key = [id, pal, title, sub].join('|');
   if (key === themeKey) return;
   themeKey = key;
@@ -59,11 +61,11 @@ function setTheme(id, pal, title, sub) {
   $('ts-hub').src = THEME.hub.image;
   if (!joined && view === 'join') $('btn-join').innerHTML = isLegacy() ? 'Enter the castle 👻' : 'Join the game 🎮';
   $('in-name').placeholder = isLegacy() ? 'e.g. Spooky Sam' : 'e.g. Minh';
-  try { sess.set('hq-theme-' + room, JSON.stringify([id, pal, title, sub])); } catch (e) { /* */ }
+  try { sess.set('hq-theme-' + room, JSON.stringify([id, pal, title, sub, GREET])); } catch (e) { /* */ }
   if (joined && isLegacy()) init3D();
   if (booted && !isLegacy()) {
     if (H3.state === 'off') initHub3D();
-    else if (H3.state === 'ready' && H3.key !== THEME.id + '|' + PAL.id) { H3.key = THEME.id + '|' + PAL.id; H3.stage.load(THEME.id, PAL.id); }
+    else if (H3.state === 'ready' && H3.key !== THEME.id + '|' + PAL.id) { H3.key = THEME.id + '|' + PAL.id; H3.stage.load(THEME.id, PAL.id).then(() => H3.stage.setGreeting(GREET, THEME.id)); }
   }
   if (booted) show(view);
 }
@@ -405,6 +407,7 @@ async function initHub3D() {
       new Promise((_, rej) => setTimeout(() => rej(new Error('3D took too long to load')), 45000)),
     ]);
     H3.key = THEME.id + '|' + PAL.id;
+    st.setGreeting(GREET || THEME.greeting || '', THEME.id);
     st.setMode('lobby');
     st.paused = true;
     H3.state = 'ready';
@@ -433,7 +436,8 @@ function hubView(v) {
   if (!c) { st.paused = true; return; }
   st.paused = false;
   st.setFrame(c[0], 0.5);
-  if (v === 'wait' || v === 'final') st.setMode('lobby');
+  if (v === 'wait') st.setMode('lobby');
+  if (v === 'final') st.setMode('final');
   // a still picture behind the question cards (saves battery while answering)
   if (!c[1]) H3.freezeT = setTimeout(() => { if (view === v) st.paused = true; }, 800);
 }
@@ -473,7 +477,12 @@ function showIntro() {
     $('intro-sub').textContent = `Good luck, ${me.name}! 🍀`;
     $('v-intro').classList.remove('inside');
     tsPlay('intro', 'enter');
-    if (hub3D()) { H3.stage.setMode('game'); H3.stage.playEnter(); }
+    if (hub3D()) {
+      const st = H3.stage;
+      st.setMode('game'); st.playEnter();
+      const d = st.current && st.current.deco;
+      if (d && d.santa) d.fly('intro');          // Christmas: Santa circles the tree on the phones too
+    }
     setTimeout(() => { if (view === 'intro') fxPlay('burst'); }, hub3D() ? 1900 : 700);
     return;
   }
@@ -667,7 +676,7 @@ function showFinal(m) {
     top.appendChild(row);
   });
   show('final');
-  if (!isLegacy() && rank && rank <= 3) setTimeout(() => fxPlay(THEME.fx.good === 'confetti' ? 'burst' : THEME.fx.good), 300);
+  if (!isLegacy() && rank && rank <= 3) setTimeout(() => fxPlay(THEME.fx.final || 'burst'), 300);
   buzz([40, 60, 40, 60, 120]);
 }
 

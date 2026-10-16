@@ -4,7 +4,7 @@
 //    #new         → studio for a new quiz (theme first, then questions)
 //    #edit=<id>   → studio for an existing quiz
 // ============================================================
-import { THEMES, THEME_ORDER, PALETTES, MUSIC, MUSIC_ORDER, getTheme, getPalette, applyTheme, loadThemeFonts } from './themes.js';
+import { THEMES, THEME_ORDER, PALETTES, MUSIC, MUSIC_ORDER, getTheme, getPalette, applyTheme, loadThemeFonts, skyOf, greetingOf } from './themes.js';
 import { adminGate, savedAdminCode, forgetAdmin } from './gm.js';
 import { listQuizzes, getQuiz, saveQuizDoc, deleteQuiz, normalize, blankQuestion } from './quizstore.js';
 import { isLocalMode } from './net.js';
@@ -62,12 +62,12 @@ async function showLibrary() {
 }
 
 function card(q) {
-  const t = getTheme(q.theme), p = getPalette(t, q.palette);
+  const t = getTheme(q.theme), p = getPalette(t, q.palette), sky = skyOf(t, p);
   loadThemeFonts(t);
   const c = document.createElement('article');
   c.className = 'qcard-lib';
   c.innerHTML = `
-    <div class="thumb" style="--s1:${p.sky[0]};--s2:${p.sky[1]};--acc:${p.accent}">
+    <div class="thumb" style="--s1:${sky[0]};--s2:${sky[1]};--acc:${p.accent}">
       <span class="badge">${esc(t.name)}</span>
       <img src="${t.hub.image}" alt="" loading="lazy">
       <div class="ttl" style="font-family:${t.fonts.title};font-weight:${t.fonts.titleWeight}">${esc(q.title || 'BOS Quiz')}</div>
@@ -275,6 +275,8 @@ function paintThemePanel() {
   $('tp-blurb').textContent = t.blurb;
   $('tp-in-title').value = S.doc.title || '';
   $('tp-in-sub').value = S.doc.subtitle || '';
+  $('tp-greet-row').classList.toggle('hidden', !t.greeting);
+  if (t.greeting && document.activeElement !== $('tp-in-greet')) { $('tp-in-greet').value = greetingOf(S.doc); $('tp-in-greet').placeholder = t.greeting; }
   $('tp-t').textContent = S.doc.title || 'BOS Quiz';
   $('tp-s').textContent = S.doc.subtitle || '';
   // the 5 colours (the same for every theme)
@@ -291,7 +293,8 @@ function paintThemePanel() {
   });
   paintMusic();
   // effects
-  const FXN = { confetti: '🎉 Confetti', beach: '☀️ Sun & beach balls', fireworks: '🎆 Fireworks & lucky envelopes', rain: '🌧️ Rain cloud', wave: '🌊 Big wave splash', fizzle: '🧨 Firecracker fizzles' };
+  const FXN = { confetti: '🎉 Confetti', beach: '☀️ Sun & beach balls', fireworks: '🎆 Fireworks show + lucky envelopes & blossoms', rain: '🌧️ Rain cloud', wave: '🌊 Big wave splash', fizzle: '🧨 Firecracker fizzles',
+    gifts: '🎁 Presents fall and pop open', snowball: '❄️ Snowballs splat + a snow flurry', lanterns: '🏮 Glowing lanterns float up', eclipse: '🌑 Clouds hide the moon, lanterns go out', sushi: '🍣 Sushi rain — “Oishii!”', wasabi: '🥵 Wasabi burn — “Wasabi!”' };
   $('tp-fx').innerHTML = t.legacy3d
     ? '<span class="ok">✓ Ghost blocked by a magic force</span><span class="bad">✗ The ghost scares the mascot (BOO!)</span><span class="muted">+ castle intro, haunted hallway, Halloween music</span>'
     : `<span class="ok">✓ ${FXN[t.fx.good]}</span><span class="bad">✗ ${FXN[t.fx.bad]}</span>`;
@@ -339,6 +342,7 @@ function pickTheme(i, dir) {
   if (!S.doc.subtitle || S.doc.subtitle === old.subtitle) S.doc.subtitle = t.subtitle;
   S.doc.theme = t.id;
   if (!S.palPicked) S.doc.palette = t.palette;   // the colour the user picked stays with every theme
+  if (S.doc.settings) delete S.doc.settings.greeting;   // each theme starts with its own greeting
   music.stopPreview();
   setDirty(true);
   paintThemePanel();
@@ -347,6 +351,7 @@ function pickTheme(i, dir) {
   if (S.stage) {
     $('tp-loading').classList.remove('hidden');
     S.stage.switchTo(t.id, S.doc.palette, dir).finally(() => $('tp-loading').classList.add('hidden'));
+    S.stage.setGreeting(greetingOf(S.doc), t.id);
   }
 }
 $('tp-prev').onclick = () => pickTheme(S.idx - 1, -1);
@@ -372,6 +377,11 @@ addEventListener('keydown', (e) => {
 $('tp-in-title').addEventListener('input', (e) => { S.doc.title = e.target.value; $('st-name').value = e.target.value; $('tp-t').textContent = e.target.value || 'BOS Quiz'; setDirty(true); });
 $('st-name').addEventListener('input', (e) => { S.doc.title = e.target.value; $('tp-in-title').value = e.target.value; $('tp-t').textContent = e.target.value || 'BOS Quiz'; setDirty(true); });
 $('tp-in-sub').addEventListener('input', (e) => { S.doc.subtitle = e.target.value; $('tp-s').textContent = e.target.value; setDirty(true); });
+$('tp-in-greet').addEventListener('input', (e) => {
+  S.doc.settings = { ...S.doc.settings, greeting: e.target.value };
+  if (S.stage) S.stage.setGreeting(greetingOf(S.doc), S.doc.theme);
+  setDirty(true);
+});
 
 // ---- 3D preview of the hubs
 async function startPreview() {
@@ -383,12 +393,14 @@ async function startPreview() {
     try {
       S.stage = new stageMod.HubStage($('tp-canvas'), {});
       S.stage.orbitSpeed = 0.12;
+      S.stage.signAt = 'front';   // like the waiting room on the big screen
     } catch (e) { $('tp-loading').innerHTML = '3D preview unavailable on this device'; return; }
   }
   S.stage.paused = S.tab !== 'theme';
   $('tp-loading').classList.remove('hidden');
   try {
     await S.stage.load(S.doc.theme, S.doc.palette);
+    S.stage.setGreeting(greetingOf(S.doc), S.doc.theme);
     S.stage.setMode('lobby');
     S.stage.orbitSpeed = 0.12;
   } finally { $('tp-loading').classList.add('hidden'); }

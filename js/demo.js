@@ -14,7 +14,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const STATES = [['question', 'Question'], ['answers', 'Answers'], ['right', '✓ Right'], ['wrong', '✗ Wrong']];
 const STEP = { question: 2600, answers: 4200, right: 3800, wrong: 3800 };
 const ME = 'assets/avatars/astronaut.webp';
-const FXN = { confetti: '🎉 confetti', beach: '☀️ sunshine + beach balls', fireworks: '🎆 fireworks + lucky envelopes', rain: '🌧️ a rain cloud', wave: '🌊 a big wave splash', fizzle: '🧨 a fizzling firecracker' };
+const FXN = { confetti: '🎉 confetti', beach: '☀️ sunshine + beach balls', fireworks: '🎆 a fireworks show + lucky envelopes', rain: '🌧️ a rain cloud', wave: '🌊 a big wave splash', fizzle: '🧨 a fizzling firecracker',
+  gifts: '🎁 presents pop open', snowball: '❄️ snowballs + a snow flurry', lanterns: '🏮 glowing lanterns float up', eclipse: '🌑 clouds hide the moon', sushi: '🍣 a sushi rain', wasabi: '🥵 a wasabi burn' };
 const NOTE = {
   question: 'Everyone reads the question first — the answers are hidden for a few seconds.',
   answers: 'Answers + countdown appear; players tap a colour on their phone. Faster = more points.',
