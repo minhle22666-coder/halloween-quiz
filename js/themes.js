@@ -1,6 +1,7 @@
 // ============================================================
 //  BOS Quiz — themes
-//  Every quiz picks one theme + one colour palette, and can rename its title.
+//  Every quiz picks one theme, one of the 5 colour palettes (shared by all themes),
+//  a background music track, and can rename its title.
 //  - halloween keeps the original haunted-castle experience (3D intro, hallway, ghost)
 //  - the other themes use a rotating 3D "hub" and their own right/wrong effects
 // ============================================================
@@ -14,19 +15,13 @@ export const THEMES = {
     blurb: 'Bright and simple — works for any quiz, any time of the year.',
     fonts: { title: "'Baloo 2', 'Be Vietnam Pro', sans-serif", body: "'Be Vietnam Pro', system-ui, sans-serif", titleWeight: 800, css: GF + 'Baloo+2:wght@600;800&family=Be+Vietnam+Pro:wght@400;500;600;700' },
     title: 'BOS Quiz', subtitle: "Let's play!",
-    hub: { file: 'assets/hubs/default.glb', image: 'assets/hubs/default.webp', size: 21, baseTop: 0.3, ground: 'grass', groundColor: '#7fcf45', groundSpread: 1.22, camDist: 22, camHeight: 10, lookY: 1.4, mascotY: 5.6 },
+    hub: { file: 'assets/hubs/default.glb', image: 'assets/hubs/default.webp', size: 21, baseTop: 0.3, ground: 'grass', groundColor: '#7fcf45', groundSpread: 1.22, camDist: 22, camHeight: 10, lookY: 1.4, mascotY: 2.2 },
     fx: { good: 'confetti', bad: 'rain' },
+    palette: 'purple', music: 'picnic',
     copy: {
       intro: 'Get ready!', walk: 'Next question coming up…', good: (p) => `<b>${p}%</b> of players got it right! 🎉`, bad: (p) => `<b>${p}%</b> of players missed it! 🌧️`,
       final: 'Champions', correct: 'Correct!', wrong: 'Oops! Wrong', timeout: "Time's up!", goodLine: 'Nailed it! ✨', badLine: 'So close… 🌧️',
     },
-    palettes: [
-      { id: 'grape', name: 'Grape', sky: ['#5b2bb5', '#2a0f6b'], accent: '#ffb703', accent2: '#ffd166', panel: '#24104f', text: '#ffffff' },
-      { id: 'ocean', name: 'Ocean', sky: ['#2563eb', '#0b1e57'], accent: '#22d3ee', accent2: '#a5f3fc', panel: '#0d1d4d', text: '#ffffff' },
-      { id: 'mint', name: 'Mint', sky: ['#14b8a6', '#064e47'], accent: '#fde047', accent2: '#fef08a', panel: '#073b36', text: '#ffffff' },
-      { id: 'coral', name: 'Coral', sky: ['#fb7185', '#7c1d4f'], accent: '#fff1a8', accent2: '#ffe4a1', panel: '#4c0f30', text: '#ffffff' },
-    ],
-    music: null,
   },
 
   summer: {
@@ -34,18 +29,13 @@ export const THEMES = {
     blurb: 'Sun, sea and a beach house — splashy waves when you miss!',
     fonts: { title: "'Pacifico', cursive", body: "'Nunito', system-ui, sans-serif", titleWeight: 400, css: GF + 'Pacifico&family=Nunito:wght@400;600;700;800;900' },
     title: 'BOS Quiz', subtitle: 'Summer Splash',
-    hub: { file: 'assets/hubs/summer.glb', image: 'assets/hubs/summer.webp', size: 17, baseTop: 1.95, clip: 1.9, hide: ['Water'], ground: 'ocean', groundColor: '#1560b0', camDist: 20, camHeight: 9, lookY: 2.2, mascotY: 6.4 },
+    hub: { file: 'assets/hubs/summer.glb', image: 'assets/hubs/summer.webp', size: 17, baseTop: 1.95, clip: 1.9, hide: ['Water'], ground: 'ocean', groundColor: '#1560b0', camDist: 24, camHeight: 11, lookY: 2.2, mascotY: 2.6 },
     fx: { good: 'beach', bad: 'wave' },
+    palette: 'sky', music: 'sundays',
     copy: {
       intro: "Surf's up — let's play!", walk: 'Catching the next wave…', good: (p) => `<b>${p}%</b> of players got it right! ☀️`, bad: (p) => `<b>${p}%</b> of players got splashed! 🌊`,
       final: 'Summer Champions', correct: 'Correct!', wrong: 'Splash! Wrong', timeout: "Time's up!", goodLine: 'Sunny side up! ☀️', badLine: 'Wiped out… 🌊',
     },
-    palettes: [
-      { id: 'tropical', name: 'Tropical', sky: ['#29b6f6', '#b3ecff'], accent: '#ff7043', accent2: '#ffd54f', panel: '#0b4f6c', text: '#ffffff' },
-      { id: 'sunset', name: 'Sunset', sky: ['#ff7e5f', '#ffd29d'], accent: '#ff3d71', accent2: '#ffe066', panel: '#6b2142', text: '#ffffff' },
-      { id: 'lagoon', name: 'Lagoon', sky: ['#00a8cc', '#8ef0d8'], accent: '#ffb000', accent2: '#ffe08a', panel: '#065a60', text: '#ffffff' },
-    ],
-    music: null,
   },
 
   halloween: {
@@ -55,44 +45,67 @@ export const THEMES = {
     title: 'BOS Quiz', subtitle: 'Halloween Night',
     hub: { file: 'assets/models/halloween.glb', image: 'assets/hubs/halloween.webp', size: 22, baseTop: 0, ground: 'night', groundColor: '#2a1c3c', groundSpread: 1.6, camDist: 30, camHeight: 13, lookY: 3 },
     legacy3d: true,  // keeps the original castle → hallway experience
+    palette: 'purple', music: 'halloween',
     copy: {
       intro: 'Enter… if you dare!', walk: 'Kamereo sneaks deeper into the hallway…', good: (p) => `<b>${p}%</b> of players got it right!`, bad: (p) => `<b>${p}%</b> of players got BOO'd! 👻`,
       final: 'The Champions', correct: 'Correct!', wrong: 'Boo! Wrong!', timeout: "Time's up!",
     },
-    palettes: [
-      { id: 'haunted', name: 'Haunted', sky: ['#3a1a5e', '#12081f'], accent: '#ff8a1f', accent2: '#ffb347', panel: '#1e1038', text: '#f5efff' },
-      { id: 'bloodmoon', name: 'Blood Moon', sky: ['#5c0b16', '#140305'], accent: '#ff4d4d', accent2: '#ff9a7a', panel: '#2a0a10', text: '#fff0f0' },
-      { id: 'toxic', name: 'Toxic', sky: ['#123d2c', '#03120c'], accent: '#a3e635', accent2: '#d9f99d', panel: '#0c2a1f', text: '#f0fff4' },
-    ],
-    music: { lobby: 'assets/music/waiting.mp3', game: 'assets/music/ingame.mp3', winner: 'assets/music/winner.mp3' },
   },
 
   lunar: {
     id: 'lunar', name: 'Lunar New Year', label: 'Happy Lunar Year',
     blurb: 'Red & gold, a floating island in the clouds — fireworks and lucky envelopes for right answers.',
-    fonts: { title: "'Playfair Display', Georgia, serif", body: "'Be Vietnam Pro', system-ui, sans-serif", titleWeight: 900, css: GF + 'Playfair+Display:ital,wght@0,700;0,900;1,700&family=Be+Vietnam+Pro:wght@400;500;600;700' },
+    fonts: { title: "'Lobster', 'Be Vietnam Pro', cursive", body: "'Be Vietnam Pro', system-ui, sans-serif", titleWeight: 400, css: GF + 'Lobster&family=Be+Vietnam+Pro:wght@400;500;600;700;800' },
     title: 'BOS Quiz', subtitle: 'Happy Lunar New Year',
-    hub: { file: 'assets/hubs/lunar.glb', image: 'assets/hubs/lunar.webp', size: 15, fit: { cx: -10, cy: 200, cz: 0, size: 640 }, glow: { White: 0.55 }, floating: true, ground: 'clouds', camDist: 24, camHeight: 6, lookY: 3.2, mascotY: 6.2 },
+    hub: { file: 'assets/hubs/lunar.glb', image: 'assets/hubs/lunar.webp', size: 13, fit: { cx: -81, cy: 299, cz: 61, size: 380 }, glow: { White: 0.55 }, floating: true, ground: 'clouds', camDist: 19, camHeight: 9, lookY: -0.4, mascotY: 1.9 },
     fx: { good: 'fireworks', bad: 'fizzle' },
+    palette: 'ruby', music: 'deckhalls',
     copy: {
       intro: 'Happy New Year — let’s play!', walk: 'A lucky question is coming…', good: (p) => `<b>${p}%</b> of players got it right! 🧧`, bad: (p) => `<b>${p}%</b> of players missed the luck! 🧨`,
       final: 'Lucky Winners', correct: 'Correct!', wrong: 'Oh no! Wrong', timeout: "Time's up!", goodLine: 'Lucky money! 🧧', badLine: 'Fizzled out… 💨',
     },
-    palettes: [
-      { id: 'redgold', name: 'Red & Gold', sky: ['#8f0019', '#e23a2c'], accent: '#ffcc33', accent2: '#ffe28a', panel: '#5a0715', text: '#fff8e7' },
-      { id: 'blossom', name: 'Peach Blossom', sky: ['#c2185b', '#ffb3c7'], accent: '#ffd166', accent2: '#ffe9a8', panel: '#5e0f33', text: '#fff6fa' },
-      { id: 'jade', name: 'Jade', sky: ['#0b6b4c', '#f2c14e'], accent: '#ffcc33', accent2: '#ffe28a', panel: '#063a2b', text: '#f3fff9' },
-    ],
-    music: null,
   },
 };
 export const THEME_ORDER = ['default', 'summer', 'halloween', 'lunar'];
+
+// ---- 5 colour palettes, the same for every theme ----
+export const PALETTES = [
+  // sky = [top of the sky, horizon]
+  { id: 'purple', name: 'Purple', sky: ['#2c1278', '#9466f5'], accent: '#ffb703', accent2: '#ffd166', panel: '#22104c', text: '#ffffff' },
+  { id: 'sky', name: 'Sky Blue', sky: ['#1b86db', '#bff0ff'], accent: '#ff7043', accent2: '#ffd54f', panel: '#0b4466', text: '#ffffff' },
+  { id: 'sunset', name: 'Sunset', sky: ['#a01f5c', '#ffb06a'], accent: '#ffe066', accent2: '#fff1b0', panel: '#5a1235', text: '#ffffff' },
+  { id: 'forest', name: 'Forest', sky: ['#0c5a3f', '#8adca2'], accent: '#fde047', accent2: '#fef08a', panel: '#0a3326', text: '#ffffff' },
+  { id: 'ruby', name: 'Ruby Red', sky: ['#8c0a1f', '#ff7448'], accent: '#ffcc33', accent2: '#ffe28a', panel: '#560715', text: '#ffffff' },
+];
+// palettes of older quizzes → the new ones
+const OLD_PALETTES = { grape: 'purple', ocean: 'sky', mint: 'forest', coral: 'sunset', tropical: 'sky', lagoon: 'sky', haunted: 'purple', bloodmoon: 'ruby', toxic: 'forest', redgold: 'ruby', blossom: 'sunset', jade: 'forest' };
+
+// ---- background music (plays all the way through: lobby → questions → podium) ----
+export const MUSIC = {
+  picnic: { name: 'Go to the Picnic', by: 'Loyalty Freak Music', src: 'assets/music/picnic.mp3', vol: 0.42 },
+  sundays: { name: '64 Sundays', by: 'Twin Musicom', src: 'assets/music/sundays.mp3', vol: 0.42 },
+  deckhalls: { name: 'Deck the Halls', by: 'Alex-Productions', src: 'assets/music/deckhalls.mp3', vol: 0.3 },
+  silly: { name: 'Silly Intro', by: 'Alexander Nakarada', src: 'assets/music/silly.mp3', vol: 0.5 },
+  halloween: { name: 'Haunted castle (Halloween)', by: '3 tracks', set: { lobby: 'assets/music/waiting.mp3', game: 'assets/music/ingame.mp3', winner: 'assets/music/winner.mp3' }, vol: 0.45 },
+  none: { name: 'No music', by: '' },
+};
+export const MUSIC_ORDER = ['picnic', 'sundays', 'deckhalls', 'silly', 'halloween', 'none'];
+/** the music of a quiz → { lobby, game, winner, vol } (same track everywhere = it never restarts) */
+export function musicSet(quiz) {
+  const t = getTheme(quiz && quiz.theme);
+  const id = (quiz && quiz.settings && MUSIC[quiz.settings.music] && quiz.settings.music) || t.music || 'none';
+  const m = MUSIC[id];
+  if (m.set) return { id, ...m.set, vol: m.vol };
+  if (!m.src) return { id };
+  return { id, lobby: m.src, game: m.src, winner: m.src, vol: m.vol };
+}
 export const QR_LOGO = 'assets/avatars/chef.webp';   // Kamereo = food → the chef mascot
 
 export const getTheme = (id) => THEMES[id] || THEMES.default;
 export function getPalette(theme, pid) {
   const t = typeof theme === 'string' ? getTheme(theme) : theme;
-  return t.palettes.find((p) => p.id === pid) || t.palettes[0];
+  pid = OLD_PALETTES[pid] || pid;
+  return PALETTES.find((p) => p.id === pid) || PALETTES.find((p) => p.id === t.palette) || PALETTES[0];
 }
 
 // colour helpers

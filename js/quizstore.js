@@ -1,9 +1,10 @@
 // ============================================================
 //  Quiz storage
 //  A quiz stores its questions as:
-//    [{ text, correct, wrong: [w1, w2, w3], time: 20, media: { type: 'image'|'video', url } | null }, ...]
+//    [{ text, answers: [2–4 texts], correct: index of the right answer, time: 20, media: { type, url } | null }, ...]
+//    (older quizzes used { correct: 'text', wrong: [3 texts] } — converted automatically)
 //  Game format (after shuffling, used by host/players):
-//    [{ text, options: [4], answer: index, time, media }, ...]
+//    [{ text, options: [2–4], answer: index, time, media }, ...]
 //  The game-master code is checked by Supabase functions (never shipped in the JS).
 // ============================================================
 import { QUESTIONS, CONFIG } from './config.js';
@@ -14,11 +15,19 @@ const LOCAL_KEY = 'hq-quiz-local';
 const LOCAL_CODE_HASH = '74bf8de471fa2fd6b4b6f3ac54f797a23c45132d5aed626e07bcf145aa76b14e';
 
 export function defaultQuiz() {
-  return QUESTIONS.map((q) => ({
-    text: q.text,
-    correct: q.options[q.answer],
-    wrong: q.options.filter((_, i) => i !== q.answer),
-  }));
+  return QUESTIONS.map((q) => ({ text: q.text, answers: [...q.options], correct: q.answer }));
+}
+export const MIN_ANSWERS = 2;
+export const MAX_ANSWERS = 4;
+/** any stored shape → { answers: [2–4 strings], correct: index } */
+function answersOf(q) {
+  let answers, correct;
+  if (Array.isArray(q.answers)) { answers = q.answers.map((a) => String(a ?? '').trim()); correct = Number.isInteger(q.correct) ? q.correct : 0; }
+  else { answers = [String(q.correct ?? '').trim(), ...((q.wrong || []).map((w) => String(w ?? '').trim()))]; correct = 0; } // old format
+  answers = answers.slice(0, MAX_ANSWERS);
+  while (answers.length < MIN_ANSWERS) answers.push('');
+  if (correct < 0 || correct >= answers.length) correct = 0;
+  return { answers, correct };
 }
 
 export const MIN_TIME = 5;
@@ -37,25 +46,28 @@ function cleanMedia(m) {
   return out;
 }
 
+/** only the playable questions: a text, ≥ 2 filled answers and the right one filled in */
 export function normalize(list) {
   if (!Array.isArray(list)) return [];
-  return list
-    .map((q) => ({
-      text: String(q.text || '').trim(),
-      correct: String(q.correct || '').trim(),
-      wrong: [0, 1, 2].map((i) => String((q.wrong || [])[i] || '').trim()),
-      time: clampTime(q.time),
-      media: cleanMedia(q.media),
-    }))
-    .filter((q) => q.text && q.correct && q.wrong.every(Boolean));
+  const out = [];
+  for (const q of list) {
+    const text = String(q.text || '').trim();
+    const { answers, correct } = answersOf(q);
+    if (!text || !answers[correct]) continue;
+    const kept = [], idx = [];
+    answers.forEach((a, i) => { if (a) { kept.push(a); idx.push(i); } });
+    if (kept.length < MIN_ANSWERS) continue;
+    out.push({ text, answers: kept, correct: idx.indexOf(correct), time: clampTime(q.time), media: cleanMedia(q.media) });
+  }
+  return out;
 }
 
 /** shuffle options so the correct answer lands on a random tile */
 export function toGame(list) {
-  return list.map((q) => {
-    const opts = [q.correct, ...q.wrong];
-    for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; }
-    return { text: q.text, options: opts, answer: opts.indexOf(q.correct), time: clampTime(q.time), media: q.media || null };
+  return normalize(list).map((q) => {
+    const order = q.answers.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    return { text: q.text, options: order.map((i) => q.answers[i]), answer: order.indexOf(q.correct), time: clampTime(q.time), media: q.media || null };
   });
 }
 
@@ -105,15 +117,9 @@ const rpcErr = (e) => new Error(/could not find the function|does not exist|sche
 /** keep every question (even unfinished ones) but tidy the fields */
 export function cleanQuestions(list) {
   if (!Array.isArray(list)) return [];
-  return list.map((q) => ({
-    text: String(q.text || '').trim(),
-    correct: String(q.correct || '').trim(),
-    wrong: [0, 1, 2].map((i) => String((q.wrong || [])[i] || '').trim()),
-    time: clampTime(q.time),
-    media: cleanMedia(q.media),
-  }));
+  return list.map((q) => ({ text: String(q.text || '').trim(), ...answersOf(q), time: clampTime(q.time), media: cleanMedia(q.media) }));
 }
-export const blankQuestion = (time = CONFIG.QUESTION_TIME) => ({ text: '', correct: '', wrong: ['', '', ''], time, media: null });
+export const blankQuestion = (time = CONFIG.QUESTION_TIME) => ({ text: '', answers: ['', '', '', ''], correct: 0, time, media: null });
 
 function localLib() {
   let lib = null;
@@ -166,6 +172,7 @@ export async function saveQuizDoc(code, doc) {
     subtitle: String(doc.subtitle || '').trim().slice(0, 80),
     theme: doc.theme || 'default',
     palette: doc.palette || '',
+    settings: { ...(doc.settings || {}) },
     questions: cleanQuestions(doc.questions),
   };
   if (!isLocalMode()) {

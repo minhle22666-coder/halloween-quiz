@@ -1,5 +1,6 @@
 -- ============================================================
---  BOS Quiz — many quizzes, each with its own theme (run once)
+--  BOS Quiz — many quizzes, each with its own theme
+--  Safe to run again (e.g. after an update): nothing is deleted, new columns are added.
 --  Supabase Dashboard → SQL Editor → New query → paste everything → Run
 --  (setup.sql must have been run before; media-setup.sql is still needed for uploads.)
 --
@@ -20,6 +21,7 @@ create table if not exists public.quizzes (
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+alter table public.quizzes add column if not exists settings jsonb not null default '{}'::jsonb;   -- music, …
 alter table public.quizzes enable row level security;   -- no policies = no direct access
 
 create or replace function public.quiz_code_ok(p_code text)
@@ -64,13 +66,14 @@ begin
       subtitle = left(coalesce(p_quiz->>'subtitle', subtitle), 80),
       theme = coalesce(p_quiz->>'theme', theme),
       palette = coalesce(p_quiz->>'palette', palette),
+      settings = coalesce(p_quiz->'settings', settings),
       questions = v_q,
       updated_at = now()
     where id = v_id;
   else
-    insert into public.quizzes (title, subtitle, theme, palette, questions)
+    insert into public.quizzes (title, subtitle, theme, palette, settings, questions)
     values (left(coalesce(p_quiz->>'title', 'BOS Quiz'), 80), left(coalesce(p_quiz->>'subtitle', ''), 80),
-            coalesce(p_quiz->>'theme', 'default'), coalesce(p_quiz->>'palette', ''), v_q)
+            coalesce(p_quiz->>'theme', 'default'), coalesce(p_quiz->>'palette', ''), coalesce(p_quiz->'settings', '{}'::jsonb), v_q)
     returning id into v_id;
   end if;
   return v_id;
@@ -95,7 +98,7 @@ grant execute on function public.delete_quiz(text, uuid) to anon, authenticated;
 
 -- copy the quiz you already made (latest saved version) once, as a Halloween quiz
 insert into public.quizzes (title, subtitle, theme, palette, questions)
-select 'BOS Quiz', 'Halloween Night', 'halloween', 'haunted', v.questions
+select 'BOS Quiz', 'Halloween Night', 'halloween', 'purple', v.questions
 from public.quiz_versions v
 where not exists (select 1 from public.quizzes)
 order by v.id desc

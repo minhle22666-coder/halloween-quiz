@@ -419,24 +419,28 @@ body.hubtheme .walk-cap, body.hubtheme .hint-line { text-shadow: 0 2px 8px rgba(
 .tscene.m-join .ts-hub { opacity: .3; }
 .tscene.m-pre .ts-hub, .tscene.m-answer .ts-hub, .tscene.m-final .ts-hub { opacity: .45; filter: blur(1px) drop-shadow(0 14px 24px rgba(0, 0, 0, .3)); }
 .tscene.m-kicked .ts-hub { opacity: .25; }
-.ts-me { position: absolute; left: 50%; top: 36%; width: min(44vw, 27dvh); translate: -50% -50%; opacity: 0; transition: opacity .3s; }
+.tscene { --me-top: 36%; --me-w: min(44vw, 27dvh); }
+.ts-me { position: absolute; left: 50%; top: var(--me-top); width: var(--me-w); translate: -50% -50%; opacity: 0; transition: opacity .3s; }
 .ts-me img { width: 100%; display: block; filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)); animation: tsBob 2.4s ease-in-out infinite; }
 @keyframes tsBob { 50% { transform: translateY(-5%) rotate(2deg); } }
 .tscene.m-intro .ts-me, .tscene.m-walk .ts-me, .tscene.m-result .ts-me, .tscene.m-locked .ts-me { opacity: 1; }
-.tscene.m-locked .ts-me { top: 44%; width: min(34vw, 20dvh); }
-.tscene.m-result .ts-me { top: 38%; }
-.ts-bubble { position: absolute; left: 50%; top: calc(36% - min(26vw, 16dvh)); translate: -50% -100%; background: #fff; color: #23103e; font: 700 17px var(--body); padding: 8px 16px; border-radius: 16px; white-space: nowrap; opacity: 0; box-shadow: 0 6px 16px rgba(0, 0, 0, .35); }
-.ts-bubble::after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -8px; border: 8px solid transparent; border-bottom: 0; border-top-color: #fff; }
-.ts-bubble.show { animation: msBubble 2.4s ease both; }
+.tscene.m-locked { --me-top: 44%; --me-w: min(34vw, 20dvh); }
+.tscene.m-result { --me-top: 37%; }
+/* my line under my avatar (no speech bubble, so nothing covers it) */
+.ts-line { position: absolute; z-index: 4; left: 50%; top: calc(var(--me-top) + var(--me-w) * .5 + 2px); translate: -50% 0; white-space: nowrap; font: 800 clamp(20px, 6.2vw, 27px)/1.1 var(--body); color: #fff; letter-spacing: .3px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .35), 0 0 14px rgba(0, 0, 0, .5); opacity: 0; }
+.ts-line.show { animation: tsLine .6s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes tsLine { from { opacity: 0; transform: translateY(12px) scale(.85); } to { opacity: 1; transform: none; } }
+.ts-line.bad { color: #ffe1e4; }
 .ts-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; }
 /* intro: the hub rises, my avatar drops in */
 .tscene.enter .ts-hub { animation: tsRise 1.2s cubic-bezier(.2, 1.2, .4, 1) both, tsHubBob 5s 1.2s ease-in-out infinite alternate; }
-@keyframes tsRise { from { transform: translateY(40vh) scale(.8); opacity: 0; } }
+@keyframes tsRise { from { transform: translateY(16vh) scale(2.3) rotate(-24deg); opacity: 0; } 60% { opacity: 1; } }
 .tscene.enter .ts-me { animation: tsDrop 1.1s .5s cubic-bezier(.3, 1.5, .5, 1) both; }
 @keyframes tsDrop { from { transform: translateY(-60vh) rotate(-30deg); } }
 /* next question: the world turns, I hop */
 .tscene.hop .ts-hub { animation: tsTurn 1.6s ease-in-out both, tsHubBob 5s 1.6s ease-in-out infinite alternate; }
-@keyframes tsTurn { 0% { transform: translateX(0); } 45% { transform: translateX(-60vw) scaleX(.9); opacity: 0; } 55% { transform: translateX(60vw) scaleX(.9); opacity: 0; } 100% { transform: translateX(0); } }
+@keyframes tsTurn { 0% { transform: none; } 45% { transform: scale(1.16) rotate(7deg); } 100% { transform: none; } }
 .tscene.hop .ts-me img { animation: tsHop .55s ease-in-out 3, tsBob 2.4s 1.65s ease-in-out infinite; }
 @keyframes tsHop { 50% { transform: translateY(-22%) scale(1.04, .96); } }
 /* my answer was RIGHT */
@@ -455,7 +459,7 @@ body.hubtheme .walk-cap, body.hubtheme .hint-line { text-shadow: 0 2px 8px rgba(
 .tscene.bad-fizzle .ts-me img { animation: tsCough .18s linear 1.6s 6, tsSoot 1s ease 1.6s both; }
 @keyframes tsCough { 50% { transform: translateX(-4%) rotate(-3deg); } }
 @keyframes tsSoot { to { filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)) grayscale(.8) brightness(.65); } }
-.tscene.bad-fizzle .ts-me { top: 30%; width: min(34vw, 20dvh); }
+.tscene.bad-fizzle { --me-top: 33%; --me-w: min(36vw, 21dvh); }
 /* the cards on top of a bright scene */
 body.hubtheme .qcard, body.hubtheme .ahead { box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
 body.hubtheme .view.answer { background: rgba(0, 0, 0, .12); }
@@ -470,3 +474,20 @@ body.hubtheme #v-intro { justify-content: flex-start; padding-top: calc(env(safe
 body.hubtheme #v-intro p { color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
 body.hubtheme #v-wait .muted { color: #fff; opacity: .9; }
 body.hubtheme .walk-cap { color: #fff; }
+.abtns[data-n="3"] .abtn:nth-child(3) { grid-column: span 2; }
+.abtns[data-n="2"] { grid-template-columns: 1fr; }
+.abtns[data-n="2"] .abtn { flex-direction: row; gap: 14px; font-size: clamp(22px, 6.4vw, 30px); }
+
+/* ---- v9: the real 3D hub on phones (same as the big screen) ---- */
+.ts3d { position: absolute; inset: 0; opacity: 0; transition: opacity .7s; }
+.ts3d.on { opacity: 1; }
+.ts3d.on ~ .ts-hub { display: none; }
+.ts3d::after { content: ''; position: absolute; inset: 0; z-index: 3; background: var(--panel-solid, #1d0f38); opacity: 0; transition: opacity .45s; pointer-events: none; }
+.ts3d.dim::after { opacity: .38; }
+.ts3d .stage-canvas { animation: none; }
+body.hub3d .tscene.m-wait .ts-me, body.hub3d .tscene.m-final .ts-me { opacity: 0; }
+/* readable on top of the scene (waves, sand, clouds…) */
+body.hubtheme .pre-foot { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 10px 14px 12px; box-shadow: 0 10px 24px rgba(0, 0, 0, .25); backdrop-filter: blur(6px); }
+body.hubtheme .pre-foot .hint-line { text-shadow: none; color: #fff; font-weight: 600; }
+body.hubtheme .walk-cap { background: var(--panel); border: 1px solid var(--line); padding: 8px 18px; border-radius: 99px; text-shadow: none; font-size: 16px; }
+body.hubtheme #v-locked .hint-line { background: var(--panel); padding: 6px 14px; border-radius: 99px; text-shadow: none; color: #fff; }

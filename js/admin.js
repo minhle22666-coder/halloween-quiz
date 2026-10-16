@@ -4,17 +4,21 @@
 //    #new         → studio for a new quiz (theme first, then questions)
 //    #edit=<id>   → studio for an existing quiz
 // ============================================================
-import { THEMES, THEME_ORDER, getTheme, getPalette, applyTheme, loadThemeFonts, rgba } from './themes.js';
+import { THEMES, THEME_ORDER, PALETTES, MUSIC, MUSIC_ORDER, getTheme, getPalette, applyTheme, loadThemeFonts } from './themes.js';
 import { adminGate, savedAdminCode, forgetAdmin } from './gm.js';
 import { listQuizzes, getQuiz, saveQuizDoc, deleteQuiz, normalize, blankQuestion } from './quizstore.js';
 import { isLocalMode } from './net.js';
 import { mountEditor } from './editor.js';
+import { createDemo } from './demo.js';
+import * as music from './music.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const local = isLocalMode() && new URLSearchParams(location.search).has('local') ? '&local' : '';
 let code = savedAdminCode();
 let lib = [];
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* */ } } };
+let sortBy = store.get('bos-lib-sort') || 'updated-desc';   // updated | created | az  +  -asc / -desc
 
 function toast(msg, ms = 3200) {
   let t = document.querySelector('.toast');
@@ -39,6 +43,8 @@ function ago(iso) {
 async function showLibrary() {
   view('lib');
   stopPreview();
+  music.stopPreview();
+  if (S.demo) S.demo.stop();
   busy(true);
   $('lib-msg').classList.add('hidden');
   try {
@@ -69,10 +75,11 @@ function card(q) {
     </div>
     <div class="meta">
       <b>${esc(q.title || 'Untitled quiz')}</b>
-      <span>${q.n} question${q.n === 1 ? '' : 's'} · edited ${ago(q.updated_at)}</span>
+      <span>${q.n} question${q.n === 1 ? '' : 's'} · ${sortBy.startsWith('created') ? 'created ' + day(q.created_at) : 'edited ' + ago(q.updated_at)}</span>
     </div>
     <div class="acts">
       <button class="btn play" data-a="play">▶ Play</button>
+      <button class="ic" data-a="demo" title="Watch a demo">👁</button>
       <button class="ic" data-a="edit" title="Edit">✏️</button>
       <button class="ic" data-a="dup" title="Duplicate">⧉</button>
       <button class="ic danger" data-a="del" title="Delete">🗑</button>
@@ -86,6 +93,7 @@ function card(q) {
       location.href = playUrl(q.id);
     }
     if (a === 'edit') location.hash = 'edit=' + q.id;
+    if (a === 'demo') openDemo(q);
     if (a === 'dup') {
       busy(true);
       try { const full = await getQuiz(code, q.id); await saveQuizDoc(code, { ...full, id: undefined, title: (full.title || 'Quiz') + ' (copy)' }); toast('⧉ Duplicated'); await showLibrary(); }
@@ -100,9 +108,37 @@ function card(q) {
   };
   return c;
 }
+const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+function sorted(list) {
+  const [key, dir] = sortBy.split('-');
+  const k = dir === 'asc' ? 1 : -1;
+  const by = key === 'az' ? (a, b) => (a.title || '').localeCompare(b.title || '', 'vi', { sensitivity: 'base', numeric: true })
+    : (a, b) => String(a[key === 'created' ? 'created_at' : 'updated_at'] || '').localeCompare(String(b[key === 'created' ? 'created_at' : 'updated_at'] || ''));
+  return [...list].sort((a, b) => by(a, b) * k);
+}
+function paintSort() {
+  const [key, dir] = sortBy.split('-');
+  document.querySelectorAll('#lib-sort [data-sort]').forEach((b) => {
+    const on = b.dataset.sort === key;
+    b.classList.toggle('on', on);
+    const base = { updated: 'Last edited', created: 'Date created', az: 'A–Z' }[b.dataset.sort];
+    b.textContent = !on ? base : key === 'az' ? (dir === 'asc' ? 'A → Z' : 'Z → A') : base + (dir === 'desc' ? ' ↓' : ' ↑');
+    b.title = key === 'az' ? 'Sort by title' : on ? (dir === 'desc' ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first') : 'Sort by ' + base.toLowerCase();
+  });
+}
+$('lib-sort').onclick = (e) => {
+  const b = e.target.closest('[data-sort]');
+  if (!b) return;
+  const [key, dir] = sortBy.split('-');
+  const k = b.dataset.sort;
+  sortBy = k === key ? `${k}-${dir === 'asc' ? 'desc' : 'asc'}` : `${k}-${k === 'az' ? 'asc' : 'desc'}`;
+  store.set('bos-lib-sort', sortBy);
+  renderLib();
+};
 function renderLib() {
+  paintSort();
   const term = $('lib-search').value.trim().toLowerCase();
-  const list = lib.filter((q) => !term || (q.title + ' ' + q.subtitle + ' ' + getTheme(q.theme).name).toLowerCase().includes(term));
+  const list = sorted(lib.filter((q) => !term || (q.title + ' ' + q.subtitle + ' ' + getTheme(q.theme).name).toLowerCase().includes(term)));
   $('lib-count').textContent = `${lib.length} quiz${lib.length === 1 ? '' : 'zes'}`;
   const g = $('lib-grid');
   g.innerHTML = '';
@@ -111,14 +147,40 @@ function renderLib() {
   add.innerHTML = '<span>＋</span><b>Create a new quiz</b><small>Pick a theme, add your questions, press Play</small>';
   add.onclick = () => { location.hash = 'new'; };
   g.appendChild(add);
-  list.forEach((q) => g.appendChild(card(q)));
+  list.forEach((q, i) => { const c = card(q); c.style.animationDelay = Math.min(i, 12) * 0.03 + 's'; g.appendChild(c); });
+  if (term && !list.length) { const m = document.createElement('p'); m.className = 'muted lib-none'; m.textContent = `No quiz matches “${term}”`; g.appendChild(m); }
 }
+
+// ---- 👁 demo of a quiz from the library (plays through its questions)
+let libDemo = null, demoQuiz = null;
+async function openDemo(q) {
+  busy(true);
+  let full;
+  try { full = await getQuiz(code, q.id); } catch (e) { toast('⚠ ' + e.message); return; } finally { busy(false); }
+  demoQuiz = full;
+  const qs = normalize(full.questions);
+  $('dmodal-title').textContent = full.title || 'BOS Quiz';
+  $('dmodal-sub').textContent = `${getTheme(full.theme).name} · ${qs.length} question${qs.length === 1 ? '' : 's'}`;
+  $('dmodal').classList.remove('hidden');
+  if (!libDemo) libDemo = createDemo($('dmodal-demo'), { loopAll: true });
+  libDemo.set({ doc: full, questions: qs.length ? qs : full.questions, index: 0 });
+  libDemo.play();
+}
+function closeDemo() { $('dmodal').classList.add('hidden'); if (libDemo) libDemo.stop(); }
+$('dmodal-close').onclick = closeDemo;
+$('dmodal').addEventListener('click', (e) => { if (e.target.id === 'dmodal') closeDemo(); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('dmodal').classList.contains('hidden')) closeDemo(); });
+$('dmodal-play').onclick = () => {
+  if (!demoQuiz) return;
+  if (!normalize(demoQuiz.questions).length) return toast('This quiz has no complete questions yet');
+  location.href = playUrl(demoQuiz.id);
+};
 $('lib-search').addEventListener('input', renderLib);
 $('btn-new').onclick = () => { location.hash = 'new'; };
 $('btn-logout').onclick = () => { forgetAdmin(); location.href = 'index.html' + (local ? '?local' : ''); };
 
 // ============================================================ studio
-const S = { doc: null, dirty: false, tab: 'theme', idx: 0, editor: null, stage: null, stageReady: null };
+const S = { doc: null, dirty: false, tab: 'theme', idx: 0, editor: null, stage: null, stageReady: null, demo: null, palPicked: false };
 let stageMod = null;
 
 function setDirty(v) {
@@ -138,22 +200,31 @@ async function openStudio(id) {
     if (id) S.doc = await getQuiz(code, id);
     else {
       const t = THEMES.default;
-      S.doc = { id: null, title: t.title, subtitle: t.subtitle, theme: 'default', palette: t.palettes[0].id, questions: [blankQuestion()] };
+      S.doc = { id: null, title: t.title, subtitle: t.subtitle, theme: 'default', palette: t.palette, settings: {}, questions: [blankQuestion()] };
     }
   } catch (e) { busy(false); toast('⚠ ' + e.message); location.hash = ''; return; }
   busy(false);
   if (!THEMES[S.doc.theme]) S.doc.theme = 'default';
+  S.doc.settings = { ...(S.doc.settings || {}) };
+  S.doc.palette = getPalette(S.doc.theme, S.doc.palette).id;     // older quizzes: map their palette to one of the 5 colours
+  S.palPicked = S.doc.palette !== getTheme(S.doc.theme).palette;
   S.idx = THEME_ORDER.indexOf(S.doc.theme);
   $('st-name').value = S.doc.title || '';
   // question editor (embedded: the studio's Save button saves everything)
   S.editor = mountEditor($('ed-root'), {
     getCode: () => code, embedded: true, toast,
     loadDoc: async () => S.doc,
-    onDirty: (v) => { if (v) setDirty(true); qCount(); },
+    onDirty: (v) => { if (v) setDirty(true); qCount(); refreshDemo(); },
+    onActive: () => refreshDemo(true),
   });
   setDirty(false);
   paintThemePanel();
   qCount();
+  if (!S.demo) {
+    S.demo = createDemo($('q-demo'), { compact: true });
+    if (innerWidth < 1100) { $('qdemo').classList.add('off'); $('qdemo-toggle').textContent = 'Show'; }   // small screens: the editor first
+  }
+  refreshDemo(true);
   tab(id ? (new URLSearchParams(location.hash.split('&').slice(1).join('&')).get('tab') || 'theme') : 'theme');
   startPreview();
 }
@@ -164,7 +235,29 @@ function tab(t) {
   $('pane-theme').classList.toggle('hidden', t !== 'theme');
   $('pane-questions').classList.toggle('hidden', t !== 'questions');
   if (S.stage) S.stage.paused = t !== 'theme';
+  if (t !== 'theme') { music.stopPreview(); paintMusic(); }
+  if (S.demo && t !== 'questions') S.demo.stop();
+  if (t === 'questions') refreshDemo(true);
 }
+
+// ---- live preview of the selected question (questions tab)
+let demoT = 0;
+function refreshDemo(now = false) {
+  if (!S.demo || !S.editor) return;
+  clearTimeout(demoT);
+  const go = () => {
+    const i = S.editor.getActive();
+    const qs = S.editor.getQuestions();
+    S.demo.set({ doc: S.doc, questions: qs, index: i });
+    $('qdemo-sub').textContent = `Question ${i + 1} of ${qs.length} — exactly what the big screen and the phones will show`;
+  };
+  if (now) go(); else demoT = setTimeout(go, 160);
+}
+$('qdemo-toggle').onclick = () => {
+  const off = $('qdemo').classList.toggle('off');
+  $('qdemo-toggle').textContent = off ? 'Show' : 'Hide';
+  if (off && S.demo) S.demo.stop(); else refreshDemo(true);
+};
 document.querySelectorAll('.st-tabs button').forEach((b) => { b.onclick = () => tab(b.dataset.tab); });
 $('tp-go').onclick = () => tab('questions');
 
@@ -184,21 +277,19 @@ function paintThemePanel() {
   $('tp-in-sub').value = S.doc.subtitle || '';
   $('tp-t').textContent = S.doc.title || 'BOS Quiz';
   $('tp-s').textContent = S.doc.subtitle || '';
-  // palettes
+  // the 5 colours (the same for every theme)
   const pals = $('tp-pals');
   pals.innerHTML = '';
-  t.palettes.forEach((p) => {
+  PALETTES.forEach((p) => {
     const b = document.createElement('button');
+    b.type = 'button';
     b.className = 'pal' + (p.id === pal.id ? ' on' : '');
     b.title = p.name;
     b.innerHTML = `<i style="background:linear-gradient(160deg, ${p.sky[0]}, ${p.sky[1]})"><em style="background:${p.accent}"></em></i><span>${esc(p.name)}</span>`;
-    b.onclick = () => { S.doc.palette = p.id; setDirty(true); paintThemePanel(); if (S.stage) S.stage.setPalette(t.id, p.id); };
+    b.onclick = () => { S.doc.palette = p.id; S.palPicked = true; setDirty(true); paintThemePanel(); if (S.stage) S.stage.setPalette(t.id, p.id); };
     pals.appendChild(b);
   });
-  // fonts
-  const fam = (f) => f.split(',')[0].replace(/'/g, '');
-  $('tp-fonts').innerHTML = `<div style="font-family:${t.fonts.title};font-weight:${t.fonts.titleWeight}"><b>Aa</b><span>${esc(fam(t.fonts.title))} · titles</span></div>
-    <div style="font-family:${t.fonts.body}"><b>Aa</b><span>${esc(fam(t.fonts.body))} · text</span></div>`;
+  paintMusic();
   // effects
   const FXN = { confetti: '🎉 Confetti', beach: '☀️ Sun & beach balls', fireworks: '🎆 Fireworks & lucky envelopes', rain: '🌧️ Rain cloud', wave: '🌊 Big wave splash', fizzle: '🧨 Firecracker fizzles' };
   $('tp-fx').innerHTML = t.legacy3d
@@ -216,6 +307,27 @@ function paintThemePanel() {
   });
 }
 
+// ---- background music
+function musicId() { const t = getTheme(S.doc.theme); return (S.doc.settings && MUSIC[S.doc.settings.music] && S.doc.settings.music) || t.music || 'none'; }
+function paintMusic() {
+  const box = $('tp-music');
+  const cur = musicId(), playing = music.previewing();
+  box.innerHTML = '';
+  MUSIC_ORDER.forEach((id) => {
+    const m = MUSIC[id];
+    const src = m.src || (m.set && m.set.lobby);
+    const row = document.createElement('div');
+    row.className = 'mrow' + (id === cur ? ' on' : '');
+    row.innerHTML = `<button type="button" class="mplay${src && playing === src ? ' playing' : ''}" ${src ? '' : 'disabled'} title="${src ? 'Listen' : ''}">${src && playing === src ? '❚❚' : src ? '▶' : '🔇'}</button>
+      <span class="mtxt"><b>${esc(m.name)}</b>${m.by ? `<small>${esc(m.by)}${id === getTheme(S.doc.theme).music ? ' · theme default' : ''}</small>` : ''}</span><span class="mok">✓</span>`;
+    row.querySelector('.mplay').onclick = (e) => { e.stopPropagation(); if (src) { music.preview(src); paintMusic(); } };
+    row.onclick = () => { S.doc.settings = { ...S.doc.settings, music: id }; setDirty(true); paintMusic(); };
+    box.appendChild(row);
+  });
+}
+
+addEventListener('music-preview', () => { if (S.doc) paintMusic(); });
+
 function pickTheme(i, dir) {
   const n = THEME_ORDER.length;
   i = (i + n) % n;
@@ -226,7 +338,8 @@ function pickTheme(i, dir) {
   // keep the user's own subtitle, swap the theme's default one
   if (!S.doc.subtitle || S.doc.subtitle === old.subtitle) S.doc.subtitle = t.subtitle;
   S.doc.theme = t.id;
-  S.doc.palette = t.palettes[0].id;
+  if (!S.palPicked) S.doc.palette = t.palette;   // the colour the user picked stays with every theme
+  music.stopPreview();
   setDirty(true);
   paintThemePanel();
   const stage = $('tp-stage');
@@ -308,7 +421,7 @@ async function saveStudio() {
 $('st-save').onclick = saveStudio;
 $('st-play').onclick = async () => {
   const ready = normalize(S.editor.getQuestions()).length;
-  if (!ready) { tab('questions'); return toast('Add at least one complete question (question + 4 answers) first'); }
+  if (!ready) { tab('questions'); return toast('Add at least one complete question (a question + at least 2 answers) first'); }
   if (S.dirty || !S.doc.id) { if (!(await saveStudio())) return; }
   location.href = playUrl(S.doc.id);
 };
@@ -333,7 +446,7 @@ addEventListener('hashchange', () => {
 });
 
 // ============================================================ boot: admin code first
-applyTheme('default', 'grape');
+applyTheme('default', 'purple');
 (async () => {
   busy(false);
   if (!code) code = await adminGate();

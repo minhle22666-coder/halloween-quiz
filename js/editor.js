@@ -8,21 +8,21 @@
 //  The answer order is shuffled every game, so the correct one lands on a random tile.
 // ============================================================
 import { CONFIG } from './config.js';
-import { getQuiz, saveQuizDoc, normalize, cleanQuestions, blankQuestion, uploadMedia, clampTime, MIN_TIME, MAX_TIME } from './quizstore.js';
+import { getQuiz, saveQuizDoc, normalize, cleanQuestions, blankQuestion, uploadMedia, clampTime, MIN_TIME, MAX_TIME, MIN_ANSWERS, MAX_ANSWERS } from './quizstore.js';
 import { prepareFile, checkLink, mediaEl, fmtSize, MEDIA_HINT } from './media.js';
+import { ANSWER_STYLES } from './config.js';
+import { SHAPES } from './ui.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const QUICK_TIMES = [10, 20, 30, 60];
 
-export function mountEditor(root, { getCode, loadDoc, quizId, saveDoc, embedded = false, onDirty, onSaved, toast = (m) => alert(m) }) {
+export function mountEditor(root, { getCode, loadDoc, quizId, saveDoc, embedded = false, onDirty, onSaved, onActive, toast = (m) => alert(m) }) {
   root.classList.add('qeditor');
   if (embedded) root.classList.add('embedded');
   if (!loadDoc && quizId) loadDoc = () => getQuiz(getCode(), quizId);
   if (!saveDoc) saveDoc = async (d) => { const id = await saveQuizDoc(getCode(), d); return { ...d, id }; };
   root.innerHTML = `
     <div class="qe-info"><div class="qe-ver">Loading the quiz…</div>
-      <div class="qe-help">Type the <b class="ok">correct answer</b> in the green box and 3 <b class="bad">wrong answers</b> below it.
-      The answers are shuffled every game, so the correct one lands on a random tile.</div>
+      <div class="qe-help">Write 2–4 answers and tap <b class="ok">✓</b> next to the right one. The answers are shuffled every game, so the right one lands on a random tile.</div>
       <div class="qe-alltime">⏱ Countdown for every question
         <input type="number" class="qe-all-in" min="${MIN_TIME}" max="${MAX_TIME}" value="${CONFIG.QUESTION_TIME}"> s
         <button type="button" class="qe-mini qe-all-btn">Apply to all</button></div>
@@ -38,6 +38,7 @@ export function mountEditor(root, { getCode, loadDoc, quizId, saveDoc, embedded 
   const fileIn = root.querySelector('.qe-file');
   let doc = null;
   let draft = [];
+  let active = 0;
   let dirty = false;
   let uploading = 0;
   let fileTarget = null;
@@ -55,7 +56,7 @@ export function mountEditor(root, { getCode, loadDoc, quizId, saveDoc, embedded 
   }
   function setDoc(d) {
     doc = d;
-    draft = cleanQuestions(d.questions).map((q) => ({ ...q, wrong: [...q.wrong], media: q.media ? { ...q.media } : null }));
+    draft = cleanQuestions(d.questions).map((q) => ({ ...q, answers: [...q.answers], media: q.media ? { ...q.media } : null }));
     if (!draft.length) draft.push(blankQuestion());
     render();
     dirty = false; status.textContent = 'No changes'; status.classList.remove('warn');
@@ -94,46 +95,58 @@ export function mountEditor(root, { getCode, loadDoc, quizId, saveDoc, embedded 
     list.innerHTML = '';
     draft.forEach((q, i) => {
       const card = document.createElement('div');
-      card.className = 'qe-card';
+      card.className = 'qe-card' + (i === active ? ' active' : '');
       card.innerHTML = `
         <div class="qe-head"><b>Question ${i + 1}</b>
           <span class="qe-tools"><button type="button" data-a="up" title="Move up">↑</button><button type="button" data-a="down" title="Move down">↓</button><button type="button" data-a="dup" title="Duplicate">⧉</button><button type="button" data-a="del" title="Delete">🗑</button></span></div>
-        <textarea rows="2" data-f="text" placeholder="Question…"></textarea>
+        <textarea rows="2" data-f="text" placeholder="Type your question…"></textarea>
         <div class="qe-media"></div>
-        <label class="ans ok"><span>✓</span><input data-f="correct" placeholder="Correct answer"></label>
-        ${[0, 1, 2].map((k) => `<label class="ans bad"><span>✗</span><input data-f="w${k}" placeholder="Wrong answer ${k + 1}"></label>`).join('')}
-        <div class="qe-time"><span>⏱ Countdown</span><input type="number" data-f="time" min="${MIN_TIME}" max="${MAX_TIME}" step="1"><span>s</span>
-          <span class="qe-chips">${QUICK_TIMES.map((t) => `<button type="button" data-t="${t}">${t}s</button>`).join('')}</span></div>`;
+        <div class="qe-alabel">Answers <small>— tap ✓ to mark the right one</small></div>
+        <div class="qe-answers">${q.answers.map((a, k) => `
+          <div class="qe-ans${k === q.correct ? ' right' : ''}" style="--c:${ANSWER_STYLES[k].color}">
+            <span class="shp">${SHAPES[ANSWER_STYLES[k].shape]}</span>
+            <input data-f="a${k}" placeholder="Answer ${k + 1}${k >= MIN_ANSWERS ? ' (optional)' : ''}">
+            <button type="button" class="qe-ok" data-c="${k}" title="${k === q.correct ? 'This is the right answer' : 'Mark as the right answer'}" aria-pressed="${k === q.correct}">✓</button>
+            ${q.answers.length > MIN_ANSWERS ? `<button type="button" class="qe-rm" data-r="${k}" title="Remove this answer">✕</button>` : '<span class="qe-rm-sp"></span>'}
+          </div>`).join('')}
+        </div>
+        ${q.answers.length < MAX_ANSWERS ? '<button type="button" class="qe-mini qe-addans" data-add="1">＋ Add answer</button>' : ''}
+        <div class="qe-time"><span>⏱ Countdown</span><input type="number" data-f="time" min="${MIN_TIME}" max="${MAX_TIME}" step="1"><span>seconds</span></div>`;
       card.querySelector('[data-f=text]').value = q.text;
-      card.querySelector('[data-f=correct]').value = q.correct;
       card.querySelector('[data-f=time]').value = q.time || CONFIG.QUESTION_TIME;
-      [0, 1, 2].forEach((k) => { card.querySelector(`[data-f=w${k}]`).value = q.wrong[k] || ''; });
-      const chips = card.querySelector('.qe-chips');
-      const paintChips = () => chips.querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.t === (q.time || CONFIG.QUESTION_TIME)));
-      paintChips();
+      q.answers.forEach((a, k) => { card.querySelector(`[data-f=a${k}]`).value = a; });
       card.addEventListener('input', (e) => {
         const f = e.target.dataset.f;
         if (!f) return;
         if (f === 'text') q.text = e.target.value;
-        else if (f === 'correct') q.correct = e.target.value;
-        else if (f === 'time') { q.time = clampTime(e.target.value); paintChips(); }
-        else q.wrong[+f.slice(1)] = e.target.value;
+        else if (f === 'time') q.time = clampTime(e.target.value);
+        else q.answers[+f.slice(1)] = e.target.value;
         markDirty();
       });
-      card.querySelector('[data-f=time]').addEventListener('change', (e) => { e.target.value = q.time = clampTime(e.target.value); paintChips(); });
-      chips.onclick = (e) => {
-        const t = +e.target.dataset.t;
-        if (!t) return;
-        q.time = t; card.querySelector('[data-f=time]').value = t; paintChips(); markDirty();
-      };
+      card.querySelector('[data-f=time]').addEventListener('change', (e) => { e.target.value = q.time = clampTime(e.target.value); });
+      card.addEventListener('focusin', () => setActive(i));
+      card.addEventListener('pointerdown', () => setActive(i));
       card.addEventListener('keydown', (e) => e.stopPropagation()); // don't trigger host shortcuts while typing
+      card.querySelector('.qe-answers').onclick = (e) => {
+        const ok = e.target.closest('[data-c]'), rm = e.target.closest('[data-r]');
+        if (ok) { q.correct = +ok.dataset.c; markDirty(); render(); }
+        if (rm) {
+          const k = +rm.dataset.r;
+          if (q.answers.length <= MIN_ANSWERS) return;
+          q.answers.splice(k, 1);
+          if (q.correct === k) q.correct = 0; else if (q.correct > k) q.correct--;
+          markDirty(); render();
+        }
+      };
+      const addBtn = card.querySelector('[data-add]');
+      if (addBtn) addBtn.onclick = () => { q.answers.push(''); markDirty(); render(); card.parentElement && list.children[i] && list.children[i].querySelector(`[data-f=a${q.answers.length - 1}]`).focus(); };
       card.querySelector('.qe-tools').onclick = (e) => {
         const a = e.target.dataset.a;
         if (!a) return;
-        if (a === 'del') { if ((q.text || q.correct) && !confirm(`Delete question ${i + 1}?`)) return; draft.splice(i, 1); if (!draft.length) draft.push(blankQuestion()); }
-        if (a === 'dup') draft.splice(i + 1, 0, { ...q, wrong: [...q.wrong], media: q.media ? { ...q.media } : null, _box: null });
-        if (a === 'up' && i > 0) [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]];
-        if (a === 'down' && i < draft.length - 1) [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]];
+        if (a === 'del') { if ((q.text || q.answers.some(Boolean)) && !confirm(`Delete question ${i + 1}?`)) return; draft.splice(i, 1); if (!draft.length) draft.push(blankQuestion()); active = Math.min(active, draft.length - 1); }
+        if (a === 'dup') { draft.splice(i + 1, 0, { ...q, answers: [...q.answers], media: q.media ? { ...q.media } : null, _box: null }); active = i + 1; }
+        if (a === 'up' && i > 0) { [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]]; active = i - 1; }
+        if (a === 'down' && i < draft.length - 1) { [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]]; active = i + 1; }
         markDirty(); render();
       };
       const mbox = card.querySelector('.qe-media');
@@ -148,6 +161,12 @@ export function mountEditor(root, { getCode, loadDoc, quizId, saveDoc, embedded 
       };
       list.appendChild(card);
     });
+  }
+  function setActive(i) {
+    if (i === active) return;
+    active = i;
+    [...list.children].forEach((c, k) => c.classList.toggle('active', k === i));
+    onActive && onActive(i);
   }
 
   // ---- media: upload a file ----
@@ -248,5 +267,5 @@ export function mountEditor(root, { getCode, loadDoc, quizId, saveDoc, embedded 
   saveBtn.onclick = async () => { if (await save()) toast('💾 Saved'); };
 
   if (loadDoc) load();
-  return { load, setDoc, save, getQuestions, isDirty: () => dirty, isUploading: () => uploading > 0, markSaved: () => markDirty(false), getDoc: () => doc };
+  return { load, setDoc, save, getQuestions, getActive: () => active, isDirty: () => dirty, isUploading: () => uploading > 0, markSaved: () => markDirty(false), getDoc: () => doc };
 }

@@ -4,7 +4,7 @@
 import { CONFIG, ANSWER_STYLES, AVATARS } from './config.js';
 import { createHostNet, createHostCtlOut, isLocalMode } from './net.js';
 import { getQuiz, normalize, toGame, verifyCode } from './quizstore.js';
-import { getTheme, getPalette, applyTheme } from './themes.js';
+import { getTheme, getPalette, applyTheme, musicSet } from './themes.js';
 import { createFx } from './fx.js';
 import { adminGate, savedAdminCode, noteButton, forgetAdmin } from './gm.js';
 import { mountEditor } from './editor.js';
@@ -118,6 +118,7 @@ function handleAnswer(m) {
   if (hostElapsed > dur + 2500) return;
   const ms = Math.max(0, Math.min(dur, Number(m.ms) || hostElapsed));
   const c = Number(m.c);
+  if (!Number.isInteger(c) || c < 0 || c >= QUIZ[S.qi].options.length) return;
   const ok = c === QUIZ[S.qi].answer;
   const pts = ok ? Math.round(CONFIG.MAX_POINTS * (1 - (ms / dur) / 2)) : 0;
   S.answers.set(m.id, { c, ms, ok, pts });
@@ -232,6 +233,33 @@ function buildQR() {
 function show(id) {
   ['scr-lobby', 'scr-intro', 'scr-question', 'scr-board', 'scr-final'].forEach((s) => $(s).classList.toggle('hidden', s !== id));
 }
+
+// hub themes: slide the 3D picture so the hub + mascot sit in the free space
+// between the question card and the answer tiles (never hidden behind them)
+function frameStage(dur = 0.6) {
+  if (!stage || !stage.setFrame || isLegacy()) return;
+  const h = innerHeight;
+  let f = 0;
+  const ph = S.phase;
+  if (ph === 'pre' || ph === 'open' || ph === 'reveal') {
+    const top = document.querySelector('.q-head').getBoundingClientRect().bottom;
+    let bottom = h;
+    if (ph === 'open') bottom = $('tiles').getBoundingClientRect().top;
+    if (ph === 'reveal') bottom = $('result-banner').getBoundingClientRect().top;
+    if (ph === 'pre') bottom = h * 0.9;
+    const at = stage.mascotScreenY ? stage.mascotScreenY() : 0.5;   // where the mascot would be without framing
+    S.focusY = (top + bottom) / 2 / h;                                // …and where it will be: effects aim there
+    f = S.focusY - at;
+  } else if (ph === 'walk') f = 0.04;
+  else if (ph === 'final') f = -0.16;
+  let x = 0;
+  if (ph === 'lobby' && innerWidth > innerHeight) {   // the hub sits in the middle of the players' side, under their names
+    const r = document.querySelector('.lobby-main').getBoundingClientRect();
+    if (r.width) { x = (r.left + r.right) / 2 / innerWidth - 0.5; f = 0.1; }
+  }
+  stage.setFrame(Math.max(-0.32, Math.min(0.2, f)), dur, x);
+}
+addEventListener('resize', () => frameStage(0));
 const nextBtn = $('btn-next');
 function setNext(label, visible = true) { nextBtn.textContent = label; nextBtn.classList.toggle('hidden', !visible); }
 
@@ -267,7 +295,7 @@ function paintTheme() {
   const ws = $('walk-sub');
   if (isLegacy()) ws.innerHTML = '<em>Kamereo</em> sneaks deeper into the hallway…';
   else ws.textContent = THEME.copy.walk;
-  music.setTracks(THEME.music);
+  music.setTracks(musicSet(quizDoc));
   document.querySelector('#count-pill img').src = isLegacy() ? 'assets/avatars/witch.webp' : 'assets/avatars/chef.webp';
 }
 
@@ -283,6 +311,7 @@ async function startGame(skipConfirm = false) {
   S.qi = -1;
   const run = ++S.run;
   show('scr-intro');
+  frameStage(0.4);
   setNext('Skip ⏭');
   setGameButtons(true);
   send({ t: 'intro' });
@@ -326,6 +355,7 @@ async function nextQuestion() {
   send({ t: 'walk', i: S.qi, total: QUIZ.length, media: q.media || undefined });
   scheduleHeartbeat(500);
   updateMascot();
+  frameStage();
   // safety net: never wait more than 7 s (e.g. if the tab is in the background and animations pause)
   await Promise.race([stage.walkTo(S.qi, FX), new Promise((r) => setTimeout(r, 7000))]);
   if (S.phase === 'walk' && S.qi === my && S.run === run) showPre();
@@ -372,6 +402,7 @@ function showPre() {
   bar.style.transition = `transform ${pv}s linear`;
   bar.style.transform = 'scaleX(0)';
   const my = S.qi, run = S.run;
+  frameStage();
   setTimeout(() => { if (S.phase === 'pre' && S.qi === my && S.run === run) openQuestion(); }, pv * 1000);
 }
 
@@ -382,6 +413,8 @@ function openQuestion() {
   scr.classList.remove('pre');
   const tiles = $('tiles');
   tiles.innerHTML = '';
+  tiles.style.setProperty('--n', q.options.length);
+  tiles.dataset.n = q.options.length;
   q.options.forEach((o, i) => {
     const st = ANSWER_STYLES[i];
     const t = el('div', 'tile');
@@ -391,6 +424,7 @@ function openQuestion() {
     tiles.appendChild(t);
   });
   S.openedAt = performance.now();
+  frameStage();
   send({ t: 'open', ...qPayload(), total: QUIZ.length });
   scheduleHeartbeat(1500);
   runTimer();
@@ -435,7 +469,7 @@ function closeQuestion() {
   const prevRank = new Map(ranked().map((p, i) => [p.id, i + 1]));
   S.lastRanks = prevRank;
   let nCorrect = 0;
-  const counts = [0, 0, 0, 0];
+  const counts = q.options.map(() => 0);
   S.lastStats = { counts, n: S.players.size, qi: S.qi };
   for (const p of S.players.values()) {
     const a = S.answers.get(p.id);
@@ -466,6 +500,7 @@ function closeQuestion() {
   banner.classList.toggle('good', good);
   banner.classList.toggle('bad', !good);
   banner.style.color = '';
+  frameStage(0.5);
   send({ t: 'reveal', q: S.qi, correct: q.answer, res: resultsPayload(), total: QUIZ.length });
   scheduleHeartbeat(3000);
   save();
@@ -475,11 +510,11 @@ function closeQuestion() {
   if (good) {
     sfx.correct();
     stage.gagBlocked(S.qi, S.gagToggle++, FX);
-    if (!isLegacy()) fx.play(THEME.fx.good, { colors: [PAL.accent, PAL.accent2, '#ffffff', '#06d6a0', '#ff4d6d'] });
+    if (!isLegacy()) fx.play(THEME.fx.good, { colors: [PAL.accent, PAL.accent2, '#ffffff', '#06d6a0', '#ff4d6d'], y: S.focusY });
   } else {
     setTimeout(() => music.duck(0.3, 2600), 700);
     stage.gagRetaliate(S.qi, FX);
-    if (!isLegacy()) { sfx.wrong(); fx.play(THEME.fx.bad); }
+    if (!isLegacy()) { sfx.wrong(); fx.play(THEME.fx.bad, { y: S.focusY }); }
   }
   if (CONFIG.AUTO_ADVANCE) autoAdvance(9);
 }
@@ -524,13 +559,14 @@ function showBoard() {
 // Kahoot-style chart: how many players picked each answer (+ % of all players)
 function renderDistribution() {
   const q = QUIZ[S.qi];
-  const st = S.lastStats && S.lastStats.qi === S.qi ? S.lastStats : { counts: [0, 0, 0, 0], n: S.players.size };
+  const st = S.lastStats && S.lastStats.qi === S.qi ? S.lastStats : { counts: (q ? q.options : []).map(() => 0), n: S.players.size };
   const n = Math.max(0, st.n);
   const answered = st.counts.reduce((a, b) => a + b, 0);
   const max = Math.max(1, ...st.counts);
   $('dist-q').textContent = q ? q.text : '';
   const bars = $('dist-bars');
   bars.innerHTML = '';
+  bars.style.setProperty('--n', q ? q.options.length : 4);
   (q ? q.options : []).forEach((o, i) => {
     const style = ANSWER_STYLES[i];
     const c = st.counts[i] || 0;
@@ -557,6 +593,7 @@ async function showFinal() {
   stage.resetActors();
   stage.setMode('final');
   show('scr-final');
+  frameStage(1);
   music.play('winner', { restart: true });
   setNext('Play again ↺');
   setGameButtons(true);
@@ -625,6 +662,7 @@ function backToLobby(ask = true) {
   stage.setMode('lobby');
   music.play('lobby');
   show('scr-lobby');
+  frameStage();
   renderLobby();
   setNext('', false);
   setGameButtons(false);
@@ -726,7 +764,7 @@ function startBots() {
   for (const p of S.players.values()) {
     if (!p.bot) continue;
     const ms = 1200 + Math.random() * (qDur() * 1000 - 2500);
-    const c = Math.random() < 0.68 ? q.answer : Math.floor(Math.random() * 4);
+    const c = Math.random() < 0.68 ? q.answer : Math.floor(Math.random() * q.options.length);
     botTimers.push(setTimeout(() => handleAnswer({ t: 'ans', id: p.id, q: S.qi, c, ms }), ms));
   }
 }
@@ -744,6 +782,7 @@ async function boot() {
   paintTheme();
   const restored = restore();
   buildQR();
+  $('stage').appendChild($('fx'));   // effects: above the 3D, below the speech bubbles and the question cards
   fx = createFx($('fx'));
   // listen for players right away (even while the 3D scene is still loading)
   net = createHostNet(room, { onPlayerMsg, onStatus: (s) => { if (s !== 'SUBSCRIBED') console.warn('realtime', s); } });
@@ -781,7 +820,7 @@ async function boot() {
 
   if (restored && S.phase === 'board') { stage.setMode('hall'); stage.skipWalk(S.qi); showBoard(); setGameButtons(true); }
   else if (restored && S.phase === 'final') { showFinal(); }
-  else { show('scr-lobby'); renderLobby(); }
+  else { show('scr-lobby'); renderLobby(); frameStage(0); }
   heartbeat();
 
   const bots = Number(params.get('bots') ?? CONFIG.DEFAULT_BOTS) || 0;

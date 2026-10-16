@@ -13,13 +13,15 @@
 </head>
 <body>
   <div class="night-bg"><div class="moon"></div><div class="bats"></div><div class="fog"></div><div class="bushes"></div></div>
-  <!-- themed 2D scene (Classic / Summer / Lunar New Year): the theme's hub + MY avatar + right/wrong effects -->
+  <!-- themed scene (Classic / Summer / Lunar New Year): the theme's 3D hub (a picture on phones without 3D)
+       + MY avatar + right/wrong effects; my line ("Nailed it!", "So close…") sits right under my avatar -->
   <div class="tscene" id="ts">
     <div class="ts-bg"><i class="ts-deco d1"></i><i class="ts-deco d2"></i><i class="ts-deco d3"></i></div>
+    <div class="ts3d" id="ts-3d"></div>
     <img class="ts-hub" id="ts-hub" alt="">
     <div class="ts-me"><img id="ts-av" alt=""></div>
-    <div class="ts-bubble" id="ts-bubble"></div>
     <canvas class="ts-fx" id="ts-fx"></canvas>
+    <div class="ts-line" id="ts-line"></div>
   </div>
   <div class="topbar hidden" id="topbar">
     <div class="me"><span id="me-av"></span><div class="me-txt"><b id="me-name"></b><small id="me-rank">Ready to play</small></div></div>

@@ -1,42 +1,44 @@
 // ============================================================
 //  Background music for the BIG SCREEN only (phones stay silent)
-//    lobby  → waiting room      game → in the game      winner → top-3 podium
-//  (Halloween: waiting.mp3 / ingame.mp3 — starts behind the castle door — / winner.mp3)
+//    scenes: lobby (waiting room) · game (intro + questions + scoreboard) · winner (podium)
+//  A quiz picks one track (themes.js → MUSIC): the same track for every scene, so it
+//  plays straight through without restarting. The Halloween set has 3 tracks
+//  (the in-game one starts behind the castle door).
 //  Cross-fades between tracks. Browsers block audio until the first click/key,
 //  so a blocked track is retried on the next user gesture.
 // ============================================================
-// tracks come from the quiz's theme (themes.js → music); a theme without music stays silent
-let TRACKS = {};
-const VOL = { lobby: 0.45, game: 0.4, winner: 0.55 };
-export function setTracks(m) {
-  TRACKS = {};
-  if (m) for (const k of Object.keys(VOL)) if (m[k]) TRACKS[k] = { src: m[k], vol: VOL[k] };
-}
-const players = {};
-let current = null;      // track name that should be playing
+let SET = {};             // { lobby, game, winner } → src
+let VOL = 0.42;
+const players = {};       // src → <audio>
+let currentScene = null;
+let currentSrc = null;
 let muted = false;
-let duckK = 1;           // 0..1 multiplier (lowered during loud scares)
+let duckK = 1;
 let pendingGesture = false;
 
-function audio(name) {
-  if (!players[name]) {
-    const a = new Audio(TRACKS[name].src);
-    a.loop = true;
-    a.preload = 'auto';
-    a.volume = 0;
-    a._target = 0;
-    players[name] = a;
-  }
-  return players[name];
+/** m = { lobby, game, winner, vol } (themes.js → musicSet) or null for silence */
+export function setTracks(m) {
+  SET = {};
+  if (m) for (const k of ['lobby', 'game', 'winner']) if (m[k]) SET[k] = m[k];
+  VOL = (m && m.vol) || 0.42;
+  if (currentScene) play(currentScene);
 }
 
-// smooth volume ramps (one shared ticker)
+function audio(src) {
+  if (!players[src]) {
+    const a = new Audio(src);
+    a.loop = true; a.preload = 'auto'; a.volume = 0;
+    players[src] = a;
+  }
+  return players[src];
+}
+
 let raf = 0;
 function tick() {
   raf = 0;
   let busy = false;
-  for (const [name, a] of Object.entries(players)) {
-    const target = name === current && !muted && TRACKS[name] ? TRACKS[name].vol * duckK : 0;
+  for (const [src, a] of Object.entries(players)) {
+    const target = src === currentSrc && !muted ? VOL * duckK : 0;
     const v = a.volume + Math.sign(target - a.volume) * Math.min(Math.abs(target - a.volume), 0.02);
     a.volume = Math.max(0, Math.min(1, v));
     if (Math.abs(a.volume - target) > 0.001) busy = true;
@@ -57,19 +59,20 @@ function waitForGesture() {
     pendingGesture = false;
     removeEventListener('pointerdown', go, true);
     removeEventListener('keydown', go, true);
-    if (current) { tryPlay(audio(current)); kick(); }
+    if (currentSrc) { tryPlay(audio(currentSrc)); kick(); }
   };
   addEventListener('pointerdown', go, true);
   addEventListener('keydown', go, true);
 }
 
-/** switch to a track ('lobby' | 'game' | 'winner' | null to stop) */
-export function play(name, { restart = false } = {}) {
-  if (name && !TRACKS[name]) name = null; // nothing to play for this scene → fade the current one out
-  if (name === current && !restart) { if (name) { const a = audio(name); if (a.paused) tryPlay(a); } return; }
-  current = name;
-  if (name) {
-    const a = audio(name);
+/** switch to the music of a scene ('lobby' | 'game' | 'winner' | null); restart only applies when the track changes */
+export function play(scene, { restart = false } = {}) {
+  currentScene = scene;
+  const src = (scene && SET[scene]) || null;
+  if (src === currentSrc) { if (src) { const a = audio(src); if (a.paused) tryPlay(a); } return; }
+  currentSrc = src;
+  if (src) {
+    const a = audio(src);
     if (restart || a.paused) { try { a.currentTime = 0; } catch (e) { /* not loaded yet */ } }
     tryPlay(a);
   }
@@ -82,6 +85,20 @@ export function duck(level = 0.35, ms = 1800) {
   clearTimeout(duck._t);
   duck._t = setTimeout(() => { duckK = 1; kick(); }, ms);
 }
-export function preload() { Object.keys(TRACKS).forEach(audio); }
-export const hasMusic = () => Object.keys(TRACKS).length > 0;
-export const nowPlaying = () => current;
+export function preload() { new Set(Object.values(SET)).forEach(audio); }
+export const hasMusic = () => Object.keys(SET).length > 0;
+export const nowPlaying = () => currentSrc;
+
+/** short preview in the admin (one track at a time) */
+let previewEl = null;
+export function preview(src) {
+  if (previewEl) { previewEl.pause(); if (previewEl.dataset.src === src) { previewEl = null; return false; } }
+  if (!src) { previewEl = null; return false; }
+  const a = previewEl = new Audio(src); a.dataset.src = src; a.volume = 0.5;
+  a.onended = () => { if (previewEl === a) { previewEl = null; dispatchEvent(new Event('music-preview')); } };
+  a.play().catch(() => { if (previewEl === a) { previewEl = null; dispatchEvent(new Event('music-preview')); } });
+  return true;
+}
+export function stopPreview() { if (previewEl) previewEl.pause(); previewEl = null; }
+/** the track being previewed (or null) */
+export const previewing = () => (previewEl && !previewEl.paused ? previewEl.dataset.src : null);

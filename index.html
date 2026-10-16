@@ -22,7 +22,15 @@
     <main class="lib">
       <div class="lib-head">
         <div><h1>My quizzes</h1><p class="muted" id="lib-count">Loading…</p></div>
-        <input id="lib-search" type="search" placeholder="Search quizzes…" autocomplete="off">
+        <div class="lib-tools">
+          <div class="lib-sort" id="lib-sort" role="group" aria-label="Sort quizzes">
+            <span>Sort</span>
+            <button type="button" data-sort="updated">Last edited</button>
+            <button type="button" data-sort="created">Date created</button>
+            <button type="button" data-sort="az">A–Z</button>
+          </div>
+          <input id="lib-search" type="search" placeholder="Search quizzes…" autocomplete="off">
+        </div>
       </div>
       <div class="lib-msg hidden" id="lib-msg"></div>
       <div class="lib-grid" id="lib-grid"></div>
@@ -60,10 +68,10 @@
           <p class="muted" id="tp-blurb"></p>
           <label class="tp-field">Title on the big screen<input id="tp-in-title" maxlength="80" autocomplete="off"></label>
           <label class="tp-field">Subtitle<input id="tp-in-sub" maxlength="80" autocomplete="off"></label>
-          <div class="tp-label">Colour palette</div>
+          <div class="tp-label">Colour <small>— works with every theme</small></div>
           <div class="tp-pals" id="tp-pals"></div>
-          <div class="tp-label">Fonts</div>
-          <div class="tp-fonts" id="tp-fonts"></div>
+          <div class="tp-label">Background music <small>— plays all the way through the game</small></div>
+          <div class="tp-music" id="tp-music"></div>
           <div class="tp-label">Right / wrong animation</div>
           <div class="tp-fx" id="tp-fx"></div>
           <button class="btn tp-next" id="tp-go">Next: questions →</button>
@@ -72,9 +80,22 @@
     </div>
 
     <div class="st-pane hidden" id="pane-questions">
-      <div class="qwrap"><div id="ed-root"></div></div>
+      <div class="qcol"><div class="qwrap"><div id="ed-root"></div></div></div>
+      <aside class="qdemo" id="qdemo">
+        <div class="qdemo-head"><b>👁 Live preview</b><small id="qdemo-sub">Question 1 — exactly what the big screen and the phones will show</small>
+          <button type="button" class="qdemo-toggle" id="qdemo-toggle" title="Show / hide the preview">Hide</button></div>
+        <div id="q-demo"></div>
+      </aside>
     </div>
   </section>
+
+  <!-- demo of a quiz from the library -->
+  <div class="dmodal hidden" id="dmodal">
+    <div class="dmodal-card">
+      <header><b id="dmodal-title">Demo</b><small id="dmodal-sub"></small><span class="sp"></span><button class="btn play" id="dmodal-play">▶ Play for real</button><button class="x" id="dmodal-close" title="Close">✕</button></header>
+      <div id="dmodal-demo"></div>
+    </div>
+  </div>
 
   <div class="adm-loading" id="adm-loading"><span class="spin"></span></div>
   <script type="module" src="js/admin.js"></script>

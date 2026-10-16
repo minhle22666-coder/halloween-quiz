@@ -45,6 +45,7 @@ let THEME = getTheme('default'), PAL = getPalette(THEME, '');
 let themeKey = '';
 let fx = null;
 let booted = false;
+const H3 = { stage: null, state: 'off', key: '', entered: false, freezeT: 0 };   // the 3D hub (non-Halloween themes)
 const isLegacy = () => !!THEME.legacy3d;
 function setTheme(id, pal, title, sub) {
   const key = [id, pal, title, sub].join('|');
@@ -60,6 +61,10 @@ function setTheme(id, pal, title, sub) {
   $('in-name').placeholder = isLegacy() ? 'e.g. Spooky Sam' : 'e.g. Minh';
   try { sess.set('hq-theme-' + room, JSON.stringify([id, pal, title, sub])); } catch (e) { /* */ }
   if (joined && isLegacy()) init3D();
+  if (booted && !isLegacy()) {
+    if (H3.state === 'off') initHub3D();
+    else if (H3.state === 'ready' && H3.key !== THEME.id + '|' + PAL.id) { H3.key = THEME.id + '|' + PAL.id; H3.stage.load(THEME.id, PAL.id); }
+  }
   if (booted) show(view);
 }
 { // first guess: the QR link carries the theme; a refresh remembers it
@@ -139,6 +144,7 @@ function show(v) {
   scene(isLegacy() ? SCENE_MODE[v] || 'off' : 'off');
   if (use3D() || !STAGE_VIEWS[v] || !isLegacy()) stageOff();
   tsMode(v);
+  hubView(v);
   document.querySelectorAll('.view').forEach((n) => n.classList.toggle('hidden', n.id !== 'v-' + v));
   $('topbar').classList.toggle('hidden', v === 'join' || v === 'kicked');
   if (v !== 'result') document.body.classList.remove('good', 'bad');
@@ -250,7 +256,11 @@ function enterGame() {
   joined = true;
   document.body.classList.add('joined');
   paintMe();
-  if (view === 'join' || view === 'kicked') show('wait');
+  if (view === 'join' || view === 'kicked') {
+    show('wait');
+    // the camera spirals down into the hub (3D) — or the hub picture zooms + turns in
+    if (!isLegacy()) { if (hub3D()) hubEnter(); else tsPlay('wait', 'enter'); }
+  }
   buzz(30);
   if (S3.stage) S3.stage.setMascotSprite(avatarSrc(me.avatar));
   init3D();
@@ -362,21 +372,76 @@ function stageOff() { MS.classList.remove('on'); clearTimeout(bubbleT); }
 
 // ---------------- themed 2D scene (non-Halloween) ----------------
 const TS = $('ts');
-let tsBubbleT = 0;
+let tsLineT = 0;
 function tsMode(v, extra = '') {
   if (isLegacy()) { TS.className = 'tscene'; return; }
   $('ts-av').src = avatarSrc(me.avatar);
   const keep = v === 'result' ? extra : '';
   TS.className = `tscene on m-${v} ${keep}`;
+  if (v !== 'result') { clearTimeout(tsLineT); $('ts-line').className = 'ts-line'; }
 }
-function tsPlay(v, cls, bubble = '', at = 0) {
+/** play a scene: cls = CSS animation, line = what my avatar says (shown under it) */
+function tsPlay(v, cls, line = '', at = 0, bad = false) {
   TS.className = `tscene on m-${v}`;
   void TS.offsetWidth; // restart the CSS animations
   TS.className = `tscene on m-${v} ${cls}`;
-  const b = $('ts-bubble');
-  b.classList.remove('show');
-  clearTimeout(tsBubbleT);
-  if (bubble) tsBubbleT = setTimeout(() => { b.textContent = bubble; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }, at);
+  const b = $('ts-line');
+  b.className = 'ts-line';
+  clearTimeout(tsLineT);
+  if (line) tsLineT = setTimeout(() => { b.textContent = line; b.className = 'ts-line show' + (bad ? ' bad' : ''); }, at);
+}
+
+// ---------------- the 3D hub (same as the big screen) ----------------
+async function initHub3D() {
+  if (isLegacy() || !can3D || H3.state !== 'off') return;
+  H3.state = 'loading';
+  try {
+    const { HubStage } = await import('./hubstage.js');
+    const st = new HubStage($('ts-3d'), { lite: true });
+    st.paused = true;
+    H3.stage = st;
+    await Promise.race([
+      st.load(THEME.id, PAL.id),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('3D took too long to load')), 45000)),
+    ]);
+    H3.key = THEME.id + '|' + PAL.id;
+    st.setMode('lobby');
+    st.paused = true;
+    H3.state = 'ready';
+    hubView(view);
+    if (joined && view === 'wait' && !H3.entered) hubEnter();
+  } catch (e) {
+    console.warn('[3D hub] using the picture instead:', e);
+    H3.state = 'failed';
+    try { H3.stage && H3.stage.renderer.setAnimationLoop(null); } catch (x) { /* */ }
+    H3.stage = null;
+    $('ts-3d').innerHTML = '';
+    hubView(view);
+  }
+}
+const hub3D = () => H3.state === 'ready' && !isLegacy();
+// per view: [frame (+ = hub lower on the screen), keep animating?]
+const HUB_VIEW = { wait: [0.2, 1], intro: [0.12, 1], walk: [0.14, 1], pre: [0.18, 0], answer: [0.18, 0], locked: [0.2, 1], result: [0.13, 1], final: [0.2, 1] };
+function hubView(v) {
+  const box = $('ts-3d'), c = HUB_VIEW[v];
+  document.body.classList.toggle('hub3d', hub3D());
+  clearTimeout(H3.freezeT);
+  if (!hub3D()) { box.classList.remove('on', 'dim'); if (H3.stage) H3.stage.paused = true; return; }
+  const st = H3.stage;
+  box.classList.toggle('on', !!c);
+  box.classList.toggle('dim', v === 'pre' || v === 'answer' || v === 'final');
+  if (!c) { st.paused = true; return; }
+  st.paused = false;
+  st.setFrame(c[0], 0.5);
+  if (v === 'wait' || v === 'final') st.setMode('lobby');
+  // a still picture behind the question cards (saves battery while answering)
+  if (!c[1]) H3.freezeT = setTimeout(() => { if (view === v) st.paused = true; }, 800);
+}
+function hubEnter() {
+  if (!hub3D()) return;
+  H3.entered = true;
+  H3.stage.setMode('lobby');
+  H3.stage.playEnter();
 }
 function fxPlay(name, opts = {}) {
   if (!fx) fx = createFx($('ts-fx'));
@@ -408,7 +473,8 @@ function showIntro() {
     $('intro-sub').textContent = `Good luck, ${me.name}! 🍀`;
     $('v-intro').classList.remove('inside');
     tsPlay('intro', 'enter');
-    setTimeout(() => { if (view === 'intro') fxPlay('burst'); }, 700);
+    if (hub3D()) { H3.stage.setMode('game'); H3.stage.playEnter(); }
+    setTimeout(() => { if (view === 'intro') fxPlay('burst'); }, hub3D() ? 1900 : 700);
     return;
   }
   $('intro-title').textContent = 'Enter… if you dare!';
@@ -436,6 +502,7 @@ function showWalk(m) {
     if (fx) fx.clear();
     $('walk-cap').textContent = THEME.copy.walk;
     tsPlay('walk', 'hop');
+    if (hub3D()) H3.stage.walkTo(m.i);
   } else if (use3D()) {
     S3.station = m.i;
     S3.stage.walkTo(m.i, FX3);
@@ -486,6 +553,7 @@ function openAnswer(m, remainingMs) {
   const box = $('abtns');
   box.innerHTML = '';
   box.classList.remove('done');
+  box.dataset.n = m.opts.length;
   m.opts.forEach((o, i) => {
     const st = ANSWER_STYLES[i];
     const b = el('button', 'abtn');
@@ -569,8 +637,8 @@ function showResult(res, q) {
   show('result');
   // MY own result decides MY animation (not the room majority)
   if (!isLegacy()) {
-    if (good) { tsPlay('result', 'res-good', THEME.copy.goodLine, 900); fxPlay(THEME.fx.good); }
-    else { tsPlay('result', `res-bad bad-${THEME.fx.bad}`, ok === -1 ? 'Too slow… ⏰' : THEME.copy.badLine, 1500); fxPlay(THEME.fx.bad); }
+    if (good) { tsPlay('result', 'res-good', THEME.copy.goodLine, 700); fxPlay(THEME.fx.good); if (hub3D()) H3.stage.gagBlocked(); }
+    else { tsPlay('result', `res-bad bad-${THEME.fx.bad}`, ok === -1 ? 'Too slow… ⏰' : THEME.copy.badLine, 1200, true); fxPlay(THEME.fx.bad); if (hub3D()) H3.stage.gagRetaliate(); }
   } else if (use3D()) {
     atStation(q);
     if (good) S3.stage.gagBlocked(q, q % 2, FX3);
@@ -606,6 +674,7 @@ function showFinal(m) {
 // ---------------- boot ----------------
 booted = true;
 buildJoin();
+if (!isLegacy()) initHub3D(); // loads while the player types their name
 $('btn-leave').onclick = () => {
   if (!confirm('Leave the game? Your score will be lost.')) return;
   if (net) net.send({ t: 'leave', id: pid });
@@ -633,4 +702,4 @@ if (room && sess.get('hq-joined') === room && me.name) {
   show('join');
   if (/^\d{6}$/.test(room)) connect(); // shows the quiz's title + theme before joining
 }
-window.__player = { pid, me, Q, S3, onHostMsg };
+window.__player = { pid, me, Q, S3, H3, onHostMsg };

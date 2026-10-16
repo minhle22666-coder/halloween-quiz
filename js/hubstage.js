@@ -63,14 +63,18 @@ export class HubStage {
     this._buildLights();
     this._buildMascot();
 
+    this.frameY = 0;            // move the picture down (+) / up (−), as a fraction of the height
+    this.frameX = 0;            // … and right (+) / left (−), as a fraction of the width
     this._resize = () => {
       const w = container.clientWidth, h = container.clientHeight;
       if (!w || !h) return;
       this.renderer.setSize(w, h, false);
       this.camera.aspect = w / h;
       this.portrait = w / h < 0.9;
-      this.camera.fov = this.portrait ? 62 : 40;
-      this.camera.updateProjectionMatrix();
+      this.camK = this.portrait ? Math.max(1.25, 0.92 / (w / h)) : 1;   // phones: step back so the whole hub fits the width
+      this.camera.fov = this.portrait ? 58 : 40;
+      this._w = w; this._h = h;
+      this._applyFrame();
     };
     new ResizeObserver(this._resize).observe(container);
     this._resize();
@@ -110,7 +114,7 @@ export class HubStage {
   _buildMascot() {
     // the current leader's avatar floats above the hub during the game
     const tex = new THREE.Texture();
-    this.mascot = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    this.mascot = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, fog: false })); // always in front: never hidden by a roof or an umbrella
     this.mascot.visible = false;
     this.mascot.renderOrder = 5;
     this.mascotState = { hop: 0, spin: 0, shake: 0, sad: 0, size: 2.3 };
@@ -260,12 +264,13 @@ export class HubStage {
     this.skyMat.uniforms.top.value.copy(top);
     this.skyMat.uniforms.bottom.value.copy(bottom);
     this.skyMat.uniforms.glow.value.set(p.accent2);
-    this.skyMat.uniforms.glowK.value = themeId === 'summer' ? 0.25 : 0.12;
+    this.skyMat.uniforms.glowK.value = 0.06;
     // fog = colour of the sky near the horizon
     this.fog.color.copy(bottom).lerp(top, 0.25);
     const R = t.hub.size / 2;
-    this.fog.near = R * (t.hub.ground === 'ocean' ? 2.5 : 3);
-    this.fog.far = R * (t.hub.ground === 'ocean' ? 9 : 12);
+    this.fogNear = R * (t.hub.ground === 'ocean' ? 2.5 : 3);
+    this.fogFar = R * (t.hub.ground === 'ocean' ? 9 : 12);
+    this.fog.near = this.fogNear; this.fog.far = this.fogFar;
     this.hemi.color.set(themeId === 'lunar' ? 0xfff0e0 : 0xffffff);
     this.hemi.groundColor.copy(bottom).lerp(new THREE.Color(0x777777), 0.5);
     this.sun.color.set(themeId === 'summer' ? 0xfff2d6 : themeId === 'lunar' ? 0xffe2c0 : 0xffffff);
@@ -310,6 +315,44 @@ export class HubStage {
     if (prev && this.current !== prev) prev.group.visible = false;
   }
 
+  /** shift the picture vertically so the hub sits in the free part of the screen (e.g. below a card) */
+  setFrame(y, dur = 0.6, x = 0) {
+    this.frameTo = y;
+    this.frameXTo = x;
+    this.frameDur = dur;
+    if (!dur) { this.frameY = y; this.frameX = x; this._applyFrame(); }
+  }
+  /** where the mascot stands on screen (0 = top … 1 = bottom) once the camera rests in game mode, before framing */
+  mascotScreenY() {
+    const H = this.current;
+    if (!H) return 0.5;
+    const cfg = H.cfg, z = 0.86, K = this.camK || 1;
+    const cam = this.camera.clone();
+    cam.clearViewOffset();
+    cam.position.set(0, cfg.camHeight * z * K, cfg.camDist * z * K);
+    cam.lookAt(0, cfg.lookY, 0);
+    cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+    const p = V(0, cfg.mascotY ?? cfg.lookY + 1, H.radius * 0.5).project(cam);
+    return 0.5 - p.y * 0.5;
+  }
+  _applyFrame() {
+    const w = this._w, h = this._h;
+    if (!w || !h) return;
+    if (Math.abs(this.frameY) > 1e-4 || Math.abs(this.frameX) > 1e-4) this.camera.setViewOffset(w, h, -this.frameX * w, -this.frameY * h, w, h); else this.camera.clearViewOffset();
+    this.camera.updateProjectionMatrix();
+  }
+
+  /** phones, right after joining / at the intro: the camera spirals down from the sky into the hub (~2.8 s) */
+  async playEnter() {
+    this.resetActors();
+    const my = this.seq;
+    const z1 = this.zoom, o1 = this.orbit + 0.5, o0 = o1 - 3.1;
+    this.zoom = 3; this.camLift = 18; this.orbit = o0;
+    await this.tween(2.8, (k) => { this.orbit = o0 + (o1 - o0) * k; this.zoom = 3 + (z1 - 3) * k; this.camLift = 18 * (1 - k) * (1 - k); }, 'out');
+    if (my !== this.seq) return;
+    await this._hop(0.6, 0.8);
+  }
+
   // ---------------------------------------------------------- loop
   _frame() {
     if (this.paused) return;
@@ -323,6 +366,15 @@ export class HubStage {
 
   _update(dt) {
     this.t += dt;
+    // glide to the framing asked by setFrame (not a tween: resetActors must not cancel it)
+    if (this.frameTo != null && (Math.abs(this.frameY - this.frameTo) > 1e-4 || Math.abs(this.frameX - (this.frameXTo || 0)) > 1e-4)) {
+      const k = 1 - Math.exp(-dt * 5 / Math.max(0.05, this.frameDur || 0.6));
+      this.frameY += (this.frameTo - this.frameY) * k;
+      this.frameX += ((this.frameXTo || 0) - this.frameX) * k;
+      if (Math.abs(this.frameY - this.frameTo) < 0.002) this.frameY = this.frameTo;
+      if (Math.abs(this.frameX - (this.frameXTo || 0)) < 0.002) this.frameX = this.frameXTo || 0;
+      this._applyFrame();
+    }
     for (let i = this.tweens.length - 1; i >= 0; i--) {
       const tw = this.tweens[i];
       if (tw.dead) { this.tweens.splice(i, 1); tw.res(false); continue; }
@@ -343,8 +395,11 @@ export class HubStage {
     if (H.items.clipPlane) H.items.clipPlane.constant = -(H.items.clipY + H.items.spin.position.y); // the cut follows the hub when it hops
     // camera orbit
     this.orbit += dt * this.orbitSpeed;
-    const dist = cfg.camDist * this.zoom * (this.portrait ? 1.25 : 1);
-    const hgt = cfg.camHeight * this.zoom + this.camLift;
+    const dist = cfg.camDist * this.zoom * (this.camK || 1);
+    const hgt = cfg.camHeight * this.zoom * (this.camK || 1) + this.camLift;
+    // the fog follows the camera distance (the hub never disappears in the mist when the camera is far away)
+    const fk = Math.max(1, this.zoom * (this.camK || 1) * (1 + this.camLift / Math.max(1, cfg.camHeight * 3)));
+    if (this.fogFar) { this.fog.near = this.fogNear * fk; this.fog.far = this.fogFar * fk; }
     const look = V(0, cfg.lookY, 0).add(H.group.position);
     this.camera.position.set(Math.sin(this.orbit) * dist, hgt, Math.cos(this.orbit) * dist).add(H.group.position);
     if (this.shake > 0.001) { this.camera.position.x += (Math.random() - 0.5) * this.shake; this.camera.position.y += (Math.random() - 0.5) * this.shake; this.shake *= Math.pow(0.03, dt); }
@@ -352,8 +407,9 @@ export class HubStage {
     // the leader's avatar above the hub
     const M = this.mascot, ms = this.mascotState;
     if (M.visible) {
-      const base = cfg.mascotY ?? cfg.lookY + R * 0.3;
-      M.position.set(Math.sin(this.orbit) * R * 0.2, base + Math.sin(this.t * 2.2) * 0.2 + ms.hop + (H.items.spin.position.y || 0), Math.cos(this.orbit) * R * 0.2);
+      const base = cfg.mascotY ?? cfg.lookY + 1;
+      const fwd = R * 0.5; // towards the camera, in front of the buildings
+      M.position.set(Math.sin(this.orbit) * fwd, base + Math.sin(this.t * 2.2) * 0.15 + ms.hop + (H.items.spin.position.y || 0), Math.cos(this.orbit) * fwd);
       M.position.x += Math.sin(this.t * 40) * ms.shake * 0.15;
       const sz = ms.size * (1 - ms.sad * 0.08);
       M.scale.set(sz, sz, 1);
@@ -391,7 +447,7 @@ export class HubStage {
   setMode(mode) {
     this.mode = mode;
     const lobby = mode === 'lobby';
-    this.mascot.visible = !lobby && !!this.mascotUrl;
+    this.mascot.visible = !lobby && mode !== 'final' && !!this.mascotUrl;   // the podium shows the winners
     this.orbitSpeed = lobby || mode === 'final' ? 0.06 : 0.03;
     this.zoom = lobby || mode === 'final' ? 1 : 0.86;
   }
@@ -412,9 +468,9 @@ export class HubStage {
     this.resetActors();
     const my = ++this.seq;
     this.setMode('game');
-    const z0 = this.zoom;
+    const z0 = this.zoom, a0 = this.orbit;
     this.mascot.visible = false;
-    await this.tween(3.2, (k) => { this.zoom = 2.6 - (2.6 - z0) * k; this.camLift = (1 - k) * 18; this.orbit += 0.012; }, 'inOut');
+    await this.tween(3.2, (k) => { this.zoom = 2.6 - (2.6 - z0) * k; this.camLift = (1 - k) * 18; this.orbit = a0 + k * 1.1; }, 'inOut');
     if (my !== this.seq) return;
     cb.onHall && cb.onHall();
     cb.onBurst && cb.onBurst();

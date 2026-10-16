@@ -33,10 +33,10 @@ export function createFx(canvas) {
   const S = () => Math.min(W, H) / 700; // size unit
 
   // ---------------------------------------------------------- building blocks
-  function confetti({ colors = ['#ff4d6d', '#ffd166', '#06d6a0', '#118ab2', '#8b5cf6', '#ff8a1f'], n = 150, burst = false } = {}) {
+  function confetti({ colors = ['#ff4d6d', '#ffd166', '#06d6a0', '#118ab2', '#8b5cf6', '#ff8a1f'], n = 150, burst = false, y: y0 } = {}) {
     for (let i = 0; i < n; i++) {
       const p = burst
-        ? { x: W / 2, y: H * 0.55, vx: rnd(-1, 1) * W * 0.7, vy: rnd(-1.1, -0.3) * H * 1.1 }
+        ? { x: W / 2, y: H * (y0 ?? 0.55), vx: rnd(-1, 1) * W * 0.7, vy: rnd(-1.1, -0.3) * H * 1.1 }
         : { x: rnd(0, W), y: rnd(-H * 0.6, -10), vx: rnd(-40, 40), vy: rnd(80, 220) };
       Object.assign(p, { w: rnd(6, 12) * S(), h: rnd(4, 8) * S(), r: rnd(0, TAU), vr: rnd(-8, 8), c: pick(colors), life: rnd(3.2, 4.6), flip: rnd(0, TAU) });
       add({
@@ -172,19 +172,20 @@ export function createFx(canvas) {
       },
     });
   }
-  function rain() {
+  function rain(o = {}) {
     let t = 0;
     const drops = [];
+    const cy0 = H * Math.max(0.13, (o.y ?? 0.37) - (o.y != null ? 0.24 : 0.2));   // the cloud hangs right above the mascot
     add({
       update(dt) {
         t += dt;
-        if (t > 0.5 && t < 2.8) for (let i = 0; i < 5; i++) drops.push({ x: W * 0.5 + rnd(-1, 1) * W * 0.32, y: H * 0.2, vy: rnd(500, 800), l: rnd(14, 26) * S(), life: 1.6 });
+        if (t > 0.5 && t < 2.8) for (let i = 0; i < 5; i++) drops.push({ x: W * 0.5 + rnd(-1, 1) * W * 0.2, y: cy0 + 40 * S(), vy: rnd(500, 800), l: rnd(14, 26) * S(), life: 1.6 });
         for (const d of drops) { d.life -= dt; d.y += d.vy * dt; }
         return t < 3.6;
       },
       draw(g) {
         const a = Math.min(1, t * 2.5) * Math.min(1, (3.6 - t) * 2);
-        const cx = W * 0.5 + Math.sin(t * 1.3) * 12 * S(), cy = H * 0.17 + (1 - Math.min(1, t * 2)) * -H * 0.3;
+        const cx = W * 0.5 + Math.sin(t * 1.3) * 12 * S(), cy = cy0 + (1 - Math.min(1, t * 2)) * -H * 0.3;
         g.globalAlpha = a * 0.35; g.fillStyle = '#0a0a1a'; g.fillRect(0, 0, W, H);   // the room gets gloomy
         g.globalAlpha = a; g.strokeStyle = 'rgba(170,200,255,.85)'; g.lineWidth = 2.4 * S(); g.lineCap = 'round';
         for (const d of drops) { if (d.life <= 0 || d.y > H) continue; g.beginPath(); g.moveTo(d.x, d.y); g.lineTo(d.x - 3, d.y + d.l); g.stroke(); }
@@ -196,11 +197,11 @@ export function createFx(canvas) {
       },
     });
   }
-  function fizzle() {
+  function fizzle(o = {}) {
     // a firecracker that doesn't go off: spark runs down the fuse… pfft… sad smoke
     let t = 0;
     const smoke = [];
-    const x = W * 0.5, y = H * 0.62, s = S();
+    const x = W * 0.5 + (o.y != null ? 160 * S() : 0), y = H * Math.min(0.75, (o.y ?? 0.5) + 0.12), s = S();
     add({
       update(dt) {
         t += dt;
@@ -232,17 +233,17 @@ export function createFx(canvas) {
 
   // ---------------------------------------------------------- named effects
   const EFFECTS = {
-    confetti: (o) => { confetti({ colors: o.colors, n: 170 }); sparkles(W / 2, H * 0.4, { n: 30 }); },
-    burst: (o) => { confetti({ colors: o.colors, n: 120, burst: true }); },
+    confetti: (o) => { confetti({ colors: o.colors, n: 170 }); sparkles(W / 2, H * (o.y ?? 0.4), { n: 30 }); },
+    burst: (o) => { confetti({ colors: o.colors, n: 120, burst: true, y: o.y }); },
     beach: (o) => { sunburst(); beachBalls(3); confetti({ colors: ['#ffd166', '#06d6a0', '#ff6b6b', '#4cc9f0', '#ffffff'], n: 90 }); },
     fireworks: (o) => {
       const cols = ['#ffd34d', '#ff4d4d', '#ff9f1c', '#fff2b3', '#ff6ec7'];
       for (let i = 0; i < 6; i++) firework(rnd(W * 0.15, W * 0.85), rnd(H * 0.15, H * 0.45), i * 0.35, cols);
       envelopes(o.n || 22);
     },
-    rain: () => rain(),
+    rain: (o) => rain(o),
     wave: () => wave(),
-    fizzle: () => fizzle(),
+    fizzle: (o) => fizzle(o),
     sparkles: (o) => sparkles(o.x ?? W / 2, o.y ?? H / 2, o),
   };
   return {
