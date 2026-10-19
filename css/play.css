@@ -1,521 +1,714 @@
-/* ================= PLAYER (phone) ================= */
-body { overflow-x: hidden; overflow-y: auto; min-height: 100dvh; }
-.night-bg .moon { width: 46vw; max-width: 220px; right: -10%; top: 2%; opacity: .55; }
-.night-bg .bats { left: auto; right: 4%; top: 3%; width: 22vw; max-width: 110px; filter: none; opacity: .9; }
-.night-bg .bushes { height: 22vw; max-height: 150px; opacity: .85; }
+// ============================================================
+//  PLAYER (phone) — follows the theme of the quiz on the big screen
+//  • Halloween: a light 3D haunted hallway (castle intro, ghost scares / magic shield),
+//    with a 2D fallback when 3D can't run
+//  • Classic / Summer / Lunar New Year: the theme's hub + MY avatar + 2D effects
+//    (confetti, beach balls, fireworks… / rain cloud, big wave, firecracker fizzle)
+// ============================================================
+import { AVATARS, ANSWER_STYLES, CONFIG, MASCOT } from './config.js';
+import { createPlayerNet } from './net.js';
+import { SHAPES, el, avatarEl, ordinal, avatarSrc } from './ui.js';
+import { mediaEl, preloadMedia, kickVideo } from './media.js';
+import { getTheme, getPalette, applyTheme } from './themes.js';
+import { createFx } from './fx.js';
 
-.view { min-height: 100dvh; padding: calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 24px); display: flex; flex-direction: column; gap: 14px; max-width: 560px; margin: 0 auto; position: relative; }
-.view.center { justify-content: center; align-items: center; text-align: center; }
-.topbar ~ .view { padding-top: calc(env(safe-area-inset-top) + 66px); }
-h2 { margin: 0; font-size: 26px; }
-.muted { color: var(--muted); margin: 0; }
-.ok { color: var(--green); font-weight: 600; margin: 0; }
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const store = {
+  get: (k, d = null) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } },
+  del: (k) => { try { localStorage.removeItem(k); } catch (e) { /* */ } },
+};
 
-.logo { font-family: var(--title); font-weight: 400; font-size: clamp(48px, 15vw, 72px); color: var(--orange); text-align: center; margin: 4vh 0 0; text-shadow: 0 0 24px rgba(255, 120, 0, .55), 0 4px 0 #4a1800; letter-spacing: 2px; line-height: 1; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 18px; display: flex; flex-direction: column; gap: 12px; backdrop-filter: blur(8px); box-shadow: 0 16px 40px rgba(0, 0, 0, .4); }
-.card label, .lbl { display: flex; flex-direction: column; gap: 6px; font-weight: 600; color: var(--muted); font-size: 15px; }
-.card input {
-  font: 600 20px var(--body); color: #1d0f38; background: #fff; border: 3px solid transparent; border-radius: 14px; padding: 12px 14px; outline: none; width: 100%;
+// per-tab identity (sessionStorage survives a refresh but each tab is its own player)
+const sess = {
+  get: (k) => { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) { /* */ } },
+  del: (k) => { try { sessionStorage.removeItem(k); } catch (e) { /* */ } },
+};
+let pid = sess.get('hq-pid');
+if (!pid) { pid = Math.random().toString(36).slice(2, 10); sess.set('hq-pid', pid); }
+
+const me = { name: store.get('hq-name', ''), avatar: store.get('hq-avatar', AVATARS[(Math.random() * AVATARS.length) | 0].id), score: 0, rank: 0 };
+let room = params.get('room') || '';
+let net = null;
+let joined = false;
+let lastSeenAt = 0;
+let lastJoinSent = 0;
+let nPlayers = 0;
+const Q = { i: -1, answered: -1, openAt: 0, dur: 20000, total: 5, choice: null, timerRAF: 0, text: '', opts: [], media: null };
+let view = 'join';
+let lastResultQ = -1;
+
+// ---------------- theme (from the QR link, then from the big screen's heartbeat) ----------------
+let THEME = getTheme('default'), PAL = getPalette(THEME, '');
+let themeKey = '';
+let fx = null;
+let booted = false;
+const H3 = { stage: null, state: 'off', key: '', entered: false, freezeT: 0 };   // the 3D hub (non-Halloween themes)
+const isLegacy = () => !!THEME.legacy3d;
+let GREET = '';
+function setTheme(id, pal, title, sub, greeting) {
+  if (greeting != null && greeting !== GREET) { GREET = greeting; if (H3.stage) H3.stage.setGreeting(GREET, id); }
+  const key = [id, pal, title, sub].join('|');
+  if (key === themeKey) return;
+  themeKey = key;
+  ({ theme: THEME, palette: PAL } = applyTheme(id || 'default', pal));
+  document.body.classList.toggle('legacy', isLegacy());
+  document.body.classList.toggle('hubtheme', !isLegacy());
+  if (title != null) { $('join-title').textContent = title || 'BOS Quiz'; document.title = (title || 'BOS Quiz') + ' · BOS Quiz'; }
+  if (sub != null) $('join-sub').textContent = sub || '';
+  $('ts-hub').src = THEME.hub.image;
+  if (!joined && view === 'join') $('btn-join').innerHTML = isLegacy() ? 'Enter the castle 👻' : 'Join the game 🎮';
+  $('in-name').placeholder = isLegacy() ? 'e.g. Spooky Sam' : 'e.g. Minh';
+  try { sess.set('hq-theme-' + room, JSON.stringify([id, pal, title, sub, GREET])); } catch (e) { /* */ }
+  if (joined && isLegacy()) init3D();
+  if (booted && !isLegacy()) {
+    if (H3.state === 'off') initHub3D();
+    else if (H3.state === 'ready' && H3.key !== THEME.id + '|' + PAL.id) { H3.key = THEME.id + '|' + PAL.id; H3.stage.load(THEME.id, PAL.id).then(() => H3.stage.setGreeting(GREET, THEME.id)); }
+  }
+  if (booted) show(view);
 }
-.card input:focus { border-color: var(--orange); }
-#in-pin { letter-spacing: 6px; text-align: center; font-size: 26px; }
-.av-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.av-opt { aspect-ratio: 1; border-radius: 18px; border: 3px solid transparent; background: rgba(255, 255, 255, .06); display: grid; place-items: center; padding: 6px; transition: transform .15s, border-color .15s, background .15s; }
-.av-opt img { width: 100%; height: 100%; object-fit: contain; }
-.av-opt.sel { border-color: var(--orange); background: rgba(255, 138, 31, .18); transform: scale(1.06); }
-.btn.big { font-size: 22px; padding: 16px; margin-top: 4px; }
-.err { color: #ff9aa4; text-align: center; min-height: 1.2em; font-weight: 600; }
-
-.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top) + 8px) 14px 8px; background: rgba(12, 5, 26, .82); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
-.topbar .me { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.topbar .me .av { width: 36px; height: 36px; border-width: 2px; }
-.topbar .me b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50vw; }
-.topbar .score { background: #fff; color: #1d0f38; font-weight: 700; border-radius: 10px; padding: 4px 12px; font-variant-numeric: tabular-nums; }
-
-.me-big .av { width: 140px; height: 140px; border-width: 5px; animation: floaty 2.6s ease-in-out infinite; }
-@keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-.souls { background: var(--panel); border: 1px solid var(--line); padding: 10px 18px; border-radius: 99px; font-size: 18px; }
-.souls b { color: var(--orange2); font-size: 24px; }
-
-.intro .bolt { font-size: 90px; animation: flick 1.2s infinite; }
-.intro h2 { font-size: 40px; color: #fff; letter-spacing: 2px; text-shadow: 0 0 20px rgba(255, 90, 40, .8); }
-@keyframes flick { 0%, 100% { opacity: .2; } 8% { opacity: 1; } 12% { opacity: .3; } 16% { opacity: 1; } 40% { opacity: .5; } }
-
-.qbadge { background: var(--orange); color: #2a1200; font-weight: 700; border-radius: 99px; padding: 6px 16px; font-size: 16px; }
-.qbadge.sm { font-size: 13px; padding: 4px 10px; flex: none; }
-.qtext { font-size: 26px; line-height: 1.25; background: rgba(255, 255, 255, .95); color: #1d0f38; padding: 20px; border-radius: 18px; width: 100%; }
-.ready { color: var(--muted); font-size: 18px; }
-.prebar { width: 100%; height: 10px; border-radius: 99px; background: rgba(255, 255, 255, .12); overflow: hidden; }
-.prebar i { display: block; height: 100%; background: linear-gradient(90deg, var(--purple), var(--orange)); transform-origin: left; }
-
-.view.answer { gap: 10px; padding-bottom: calc(env(safe-area-inset-bottom) + 12px); }
-.qline { display: flex; align-items: flex-start; gap: 8px; background: rgba(255, 255, 255, .95); color: #1d0f38; border-radius: 14px; padding: 10px 12px; font-weight: 700; font-size: 17px; line-height: 1.25; }
-.tbar { position: relative; height: 26px; border-radius: 99px; background: rgba(255, 255, 255, .12); overflow: hidden; }
-.tbar i { position: absolute; inset: 0; background: linear-gradient(90deg, var(--green), var(--orange2)); transform-origin: left; }
-.tbar.urgent i { background: var(--red); }
-.tbar b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
-.abtns { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 10px; min-height: 52dvh; }
-.abtn {
-  --c: #e5482f; --d: #9e2a17;
-  border: 0; border-radius: 18px; color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--c) 90%, #fff), var(--c));
-  box-shadow: 0 6px 0 var(--d); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px;
-  font: 700 19px var(--body); text-shadow: 0 2px 0 rgba(0, 0, 0, .25); transition: transform .08s, box-shadow .08s; touch-action: manipulation;
+{ // first guess: the QR link carries the theme; a refresh remembers it
+  let saved = null;
+  try { saved = JSON.parse(sess.get('hq-theme-' + room) || 'null'); } catch (e) { /* */ }
+  if (saved) setTheme(...saved);
+  else setTheme(params.get('th') || 'default', params.get('pl') || '', null, null);
 }
-.abtn .shape { font-size: 38px; }
-.abtn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--d); }
-.abtns.done .abtn { opacity: .3; }
-.abtns.done .abtn.mine { opacity: 1; }
 
-.picked { width: 120px; height: 120px; border-radius: 26px; display: grid; place-items: center; box-shadow: 0 8px 0 rgba(0, 0, 0, .3); animation: pop .4s cubic-bezier(.2, 1.6, .4, 1); }
-.picked .shape { font-size: 64px; }
-.floaty-ghost { font-size: 54px; animation: floaty 2s ease-in-out infinite; }
-@keyframes pop { from { transform: scale(.3); opacity: 0; } }
+// ---------------- 3D scene ----------------
+const S3 = { stage: null, state: 'off', station: -1, pct: 0 };
+const can3D = (() => {
+  if (params.has('2d')) return false;
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; }
+})();
+const use3D = () => S3.state === 'ready';
+// phones vibrate instead of playing sounds
+const FX3 = {
+  knock: () => buzz(18), slam: () => buzz(45), boo: () => buzz([70, 40, 160]), bonk: () => buzz(35),
+  zap: () => buzz(15), thud: () => buzz(50), creak: () => buzz(10), bell: () => buzz([20, 80, 20]),
+};
 
-/* result */
-.view.result { transition: background .4s; }
-body.good { background: #0d2a1a; }
-body.bad { background: #2e0c16; }
-body.good .night-bg { filter: hue-rotate(70deg) saturate(.8); }
-body.bad .night-bg { filter: hue-rotate(-30deg) saturate(1.2); }
-.verdict { font-family: var(--title); font-weight: 400; font-size: 54px; letter-spacing: 3px; animation: pop .5s cubic-bezier(.2, 1.6, .4, 1); }
-.verdict.good { color: var(--green); text-shadow: 0 0 22px rgba(61, 220, 132, .6); }
-.verdict.bad { color: var(--red); text-shadow: 0 0 22px rgba(255, 77, 94, .6); }
-.gain { font-size: 30px; font-weight: 700; background: rgba(0, 0, 0, .35); padding: 8px 22px; border-radius: 14px; }
-.streak { color: var(--orange2); font-weight: 700; font-size: 18px; min-height: 1.2em; }
-.rankbox { display: flex; flex-direction: column; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 12px 26px; }
-.rankbox span { color: var(--muted); }
-.rankbox b { font-size: 46px; line-height: 1.1; }
+async function init3D() {
+  if (S3.state !== 'off' || !isLegacy()) return;
+  if (!can3D) { S3.state = 'failed'; return paintPrep(); }
+  S3.state = 'loading';
+  paintPrep();
+  try {
+    const { Stage } = await import('./stage3d.js');
+    const st = new Stage($('stage3d'), { lite: true });
+    st.onStartle = () => buzz(25);
+    await Promise.race([
+      st.load((k) => { S3.pct = k; paintPrep(); }, 12),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('3D took too long to load')), 60000)),
+    ]);
+    st.setMascotSprite(avatarSrc(me.avatar));
+    st.paused = true;
+    S3.stage = st;
+    S3.state = 'ready';
+    // joined mid-game? jump to the right spot
+    if (Q.i >= 0 && ['walk', 'pre', 'answer', 'locked', 'result'].includes(view)) { st.skipWalk(Q.i); S3.station = Q.i; }
+    show(view);
+  } catch (e) {
+    console.warn('[3D] using the 2D scene instead:', e);
+    S3.state = 'failed';
+    $('stage3d').innerHTML = '';
+  }
+  paintPrep();
+}
+function paintPrep() {
+  const p = $('prep');
+  p.classList.toggle('hidden', S3.state !== 'loading');
+  $('prep-txt').textContent = `Preparing the haunted hallway… ${Math.round(S3.pct * 100)}%`;
+}
+// 'on' = visible + animating, 'dim' = darker behind a card, 'still' = dark + paused, 'off' = hidden
+function scene(mode) {
+  const box = $('stage3d');
+  const on = use3D() && mode !== 'off';
+  box.classList.toggle('on', on);
+  box.classList.toggle('dim', on && (mode === 'dim' || mode === 'still'));
+  document.body.classList.toggle('has3d', use3D());
+  if (S3.stage) {
+    S3.stage.paused = !on || mode === 'still';
+    if (mode !== 'on') S3.stage.clearBubbles(); // no leftover speech bubbles behind the cards
+  }
+}
+function atStation(i) {
+  if (!use3D() || S3.station === i) return;
+  S3.stage.skipWalk(i);
+  S3.station = i;
+}
 
-/* tiny emoji skits */
-.skit { position: relative; width: 240px; height: 130px; font-size: 54px; }
-.skit span { position: absolute; display: block; line-height: 1; }
-.skit.slip .ghost { left: -10px; bottom: 30px; animation: slipGhost 2.2s ease-in forwards; }
-.skit.slip .nana { left: 100px; bottom: 6px; font-size: 40px; }
-.skit.slip .wiz { right: 0; bottom: 6px; animation: cheer .5s ease-in-out 1.2s 4 alternate; }
-.skit.slip .stars { left: 140px; bottom: 50px; font-size: 26px; opacity: 0; animation: dizzy 1s linear 1.4s 3; }
-@keyframes slipGhost { 0% { transform: translateX(0); } 45% { transform: translateX(100px) rotate(0); } 70% { transform: translate(140px, -60px) rotate(400deg); } 100% { transform: translate(150px, 20px) rotate(630deg) scaleY(.7); } }
-@keyframes cheer { to { transform: translateY(-16px) rotate(8deg); } }
-@keyframes dizzy { 0% { opacity: 1; transform: rotate(0); } 100% { opacity: 1; transform: rotate(360deg); } }
-.skit.door .doorx { right: 40px; bottom: 6px; font-size: 70px; }
-.skit.door .ghost { right: 70px; bottom: 28px; animation: stuck .12s linear 1.2s 14 alternate; transform: scaleX(.6); }
-.skit.door .wiz { left: 10px; bottom: 6px; animation: look 1.2s ease-in-out 2; }
-@keyframes stuck { from { transform: scaleX(.6) rotate(-8deg); } to { transform: scaleX(.6) rotate(8deg); } }
-@keyframes look { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(-1); } }
-.skit.scare .wiz { left: 90px; bottom: 6px; animation: faint 2.2s ease-in forwards; transform-origin: bottom center; }
-.skit.scare .soul { left: 90px; bottom: 10px; opacity: 0; filter: grayscale(1) brightness(1.8); animation: soul 2.4s ease-out .7s forwards; }
-.skit.scare .ghost { left: -60px; bottom: 30px; font-size: 70px; animation: boo .6s cubic-bezier(.2, 1.6, .4, 1) forwards; }
-.skit.scare .hat { left: 110px; bottom: 70px; font-size: 34px; animation: hatfall 1.4s ease-in .5s forwards; }
-@keyframes boo { to { transform: translateX(80px) scale(1.15); } }
-@keyframes faint { 0%, 25% { transform: translateY(0); } 35% { transform: translateY(-24px); } 60%, 100% { transform: rotate(-90deg) translateX(-10px); } }
-@keyframes soul { 0% { opacity: .8; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-110px) rotate(-12deg); } }
-@keyframes hatfall { 0% { transform: translateY(0); } 30% { transform: translate(30px, -40px) rotate(60deg); } 100% { transform: translate(70px, 64px) rotate(120deg); } }
+// ---------------- views ----------------
+const SCENE_MODE = { intro: 'on', walk: 'on', pre: 'dim', answer: 'still', locked: 'on', result: 'on' };
+function show(v) {
+  view = v;
+  scene(isLegacy() ? SCENE_MODE[v] || 'off' : 'off');
+  if (use3D() || !STAGE_VIEWS[v] || !isLegacy()) stageOff();
+  tsMode(v);
+  hubView(v);
+  document.querySelectorAll('.view').forEach((n) => n.classList.toggle('hidden', n.id !== 'v-' + v));
+  $('topbar').classList.toggle('hidden', v === 'join' || v === 'kicked');
+  if (v !== 'result') document.body.classList.remove('good', 'bad');
+  window.scrollTo(0, 0);
+}
 
-/* final */
-.final .medal { font-size: 96px; animation: pop .6s cubic-bezier(.2, 1.6, .4, 1); }
-.final h2 { font-size: 32px; }
-.f-score { font-size: 24px; font-weight: 700; color: var(--orange2); }
-.f-top { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.f-top .r { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; text-align: left; }
-.f-top .r .av { width: 40px; height: 40px; border-width: 2px; }
-.f-top .r b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.f-top .r i { font-style: normal; color: var(--orange2); font-weight: 700; }
+let scoreAnim = 0;
+function setScore(n, gain = 0) {
+  const node = $('me-score');
+  const from = me.score;
+  me.score = n;
+  cancelAnimationFrame(scoreAnim);
+  if (gain > 0 && n > from) {
+    const t0 = performance.now();
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / 900);
+      node.textContent = Math.round(from + (n - from) * (1 - Math.pow(1 - k, 3))).toLocaleString('en-US');
+      if (k < 1) scoreAnim = requestAnimationFrame(step);
+    };
+    scoreAnim = requestAnimationFrame(step);
+    const g = $('sp-gain');
+    g.textContent = '+' + gain.toLocaleString('en-US');
+    g.classList.remove('show'); void g.offsetWidth; g.classList.add('show');
+    const pill = $('scorepill');
+    pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump');
+  } else node.textContent = n.toLocaleString('en-US');
+}
+function setRank(rank) {
+  me.rank = rank || 0;
+  $('me-rank').textContent = rank ? `#${rank}${nPlayers ? ' of ' + nPlayers : ''}` : 'Ready to play';
+  $('me-rank').classList.toggle('lead', rank === 1);
+}
+function buzz(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { /* */ } }
 
-.conn { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 10px); left: 50%; transform: translateX(-50%); background: #5a1020; padding: 6px 14px; border-radius: 99px; font-size: 14px; z-index: 20; }
+// ---------------- join form ----------------
+function buildJoin() {
+  if (/^\d{6}$/.test(room)) $('pin-row').classList.add('hidden');
+  $('in-pin').value = room;
+  $('in-name').value = me.name;
+  const grid = $('av-grid');
+  AVATARS.forEach((a) => {
+    const b = el('button', 'av-opt' + (a.id === me.avatar ? ' sel' : ''));
+    b.type = 'button';
+    b.setAttribute('aria-label', a.id);
+    const img = new Image(); img.src = a.src; img.alt = '';
+    b.appendChild(img);
+    b.onclick = () => { me.avatar = a.id; grid.querySelectorAll('.av-opt').forEach((x) => x.classList.toggle('sel', x === b)); buzz(10); };
+    grid.appendChild(b);
+  });
+  $('btn-join').onclick = doJoin;
+  $('in-pin').addEventListener('input', () => { $('pin-err').textContent = ''; $('in-pin').classList.remove('shake'); });
+  $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
+}
 
-.tb-right { display: flex; align-items: center; gap: 8px; }
-.leave { border: 1px solid rgba(255, 120, 130, .45); background: rgba(255, 77, 94, .15); color: #ffb3b9; border-radius: 10px; padding: 5px 10px; font: 600 13px var(--body); }
-.walker { font-size: 84px; position: relative; animation: sneak 1.6s ease-in-out infinite; }
-.walker span { position: absolute; left: -36px; bottom: 6px; font-size: 34px; opacity: .7; }
-@keyframes sneak { 0%, 100% { transform: translate(-14px, 0) rotate(-6deg); } 50% { transform: translate(14px, -10px) rotate(6deg); } }
+// ---- joining: the big screen must answer, otherwise the PIN is wrong ----
+const JOIN_TIMEOUT = 9000;
+let pending = null; // { resolve, timer, resend }
+function waitForHost(ms) {
+  return new Promise((resolve) => {
+    const done = (ok) => { if (!pending) return; clearTimeout(pending.timer); clearInterval(pending.resend); pending = null; resolve(ok); };
+    pending = { resolve: done };
+    pending.timer = setTimeout(() => done(false), ms);
+    pending.resend = setInterval(() => { if (net) sendJoin(); }, 2500);
+  });
+}
+function joinError(msg) {
+  $('pin-err').textContent = msg;
+  $('join-err').textContent = '';
+  $('pin-row').classList.remove('hidden');
+  $('pin-row').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const pinIn = $('in-pin');
+  pinIn.classList.remove('shake'); void pinIn.offsetWidth; pinIn.classList.add('shake');
+  pinIn.focus(); pinIn.select();
+  buzz([60, 40, 60]);
+}
+function setJoinBusy(busy) {
+  const b = $('btn-join');
+  b.disabled = busy;
+  b.innerHTML = busy ? '<span class="spin"></span> Looking for the game…' : (isLegacy() ? 'Enter the castle 👻' : 'Join the game 🎮');
+}
 
-/* correct: the ghost smacks into a magic shield */
-.skit.block .wiz { right: 4px; bottom: 10px; animation: cheer .45s ease-in-out 1.4s 4 alternate; }
-.skit.block .ghost { left: -10px; bottom: 34px; animation: blockGhost 2s ease-in forwards; }
-.skit.block .shield { left: 116px; bottom: 6px; width: 16px; height: 110px; border-radius: 50%; background: radial-gradient(ellipse, rgba(200,160,255,.95), rgba(139,92,246,.2) 70%, transparent); box-shadow: 0 0 24px #b48cff; opacity: 0; animation: shieldOn 1.6s ease-out .45s forwards; }
-.skit.block .spark { right: 30px; bottom: 76px; font-size: 30px; opacity: 0; animation: sparkle 1s ease-out 1.3s 2; }
-@keyframes blockGhost { 0% { transform: translateX(0); } 30% { transform: translateX(78px) scale(1.1); } 38% { transform: translateX(70px) scaleX(.6); } 70% { transform: translate(-10px, -30px) rotate(-200deg) scale(.8); opacity: 1; } 100% { transform: translate(-60px, -50px) rotate(-420deg) scale(.2); opacity: 0; } }
-@keyframes shieldOn { 0% { opacity: 0; transform: scaleY(.2); } 20% { opacity: 1; transform: scaleY(1.1); } 40% { transform: scaleY(1) scaleX(1.6); } 100% { opacity: 0; transform: scaleY(1); } }
-@keyframes sparkle { 0% { opacity: 0; transform: scale(.4); } 50% { opacity: 1; transform: scale(1.3) rotate(20deg); } 100% { opacity: 0; transform: scale(.8); } }
+async function doJoin() {
+  if (pending) return;
+  const name = $('in-name').value.trim().replace(/\s+/g, ' ').slice(0, 16);
+  const pin = ($('in-pin').value || room).trim();
+  if (!/^\d{6}$/.test(pin)) return joinError('Enter the 6-digit game PIN from the big screen');
+  if (name.length < 1) { $('join-err').textContent = 'Type your name first 👻'; return; }
+  $('join-err').textContent = ''; $('pin-err').textContent = '';
+  me.name = name;
+  store.set('hq-name', name); store.set('hq-avatar', me.avatar);
+  if (pin !== room || !net) {
+    disconnect();
+    room = pin; params.set('room', room); history.replaceState(null, '', '?' + params.toString());
+    connect();
+  }
+  setJoinBusy(true);
+  const wait = waitForHost(JOIN_TIMEOUT);
+  sendJoin();
+  const ok = await wait;
+  setJoinBusy(false);
+  if (!ok) {
+    disconnect();
+    return joinError(`No game found with PIN ${pin} 👻 Check the 6 digits on the big screen and try again.`);
+  }
+  enterGame();
+}
+function enterGame() {
+  sess.set('hq-joined', room);
+  joined = true;
+  document.body.classList.add('joined');
+  paintMe();
+  if (view === 'join' || view === 'kicked') {
+    show('wait');
+    // the camera spirals down into the hub (3D) — or the hub picture zooms + turns in
+    if (!isLegacy()) { if (hub3D()) hubEnter(); else tsPlay('wait', 'enter'); }
+  }
+  buzz(30);
+  if (S3.stage) S3.stage.setMascotSprite(avatarSrc(me.avatar));
+  init3D();
+}
 
-/* ================= phone: full-screen haunted-hallway scene ================= */
-.ministage { position: fixed; inset: 0; z-index: 1; overflow: hidden; background: #07030c; opacity: 0; visibility: hidden; transition: opacity .35s, visibility .35s; isolation: isolate; }
-.ministage.on { opacity: 1; visibility: visible; }
-.ministage > *, .ms-actors > * { position: absolute; pointer-events: none; }
-/* the background keeps its own aspect ratio (cover), so the painting/eyes stay aligned */
-.ms-world { left: 50%; top: 50%; translate: -50% -50%; width: max(100vw, calc(100dvh * 540 / 960)); aspect-ratio: 540 / 960; }
-.ms-cam { position: absolute; inset: 0; transform-origin: 50% 46%; }
-.ms-bg { position: absolute; inset: 0; background: url('../assets/img/hall-bg.webp') center / 100% 100% no-repeat; }
-.ms-eyes { position: absolute; left: 91.4%; top: 30.2%; width: 6%; height: 2%; display: flex; justify-content: space-between; opacity: 0; }
-.ms-eyes i { width: 34%; height: 100%; border-radius: 50%; background: #ff2a2a; box-shadow: 0 0 8px 3px rgba(255, 30, 30, .9); }
-.ms-shade { inset: 0; background: linear-gradient(rgba(7, 3, 12, .75), transparent 22%, transparent 62%, rgba(7, 3, 12, .9)); }
-.ms-dark { inset: 0; background: #000; opacity: 0; }
-.ms-tint { inset: 0; opacity: 0; transition: opacity .6s; }
-.ministage.tint-good .ms-tint { opacity: 1; background: radial-gradient(ellipse at 50% 60%, rgba(61, 220, 132, .28), transparent 65%); }
-.ministage.tint-bad .ms-tint { opacity: 1; background: radial-gradient(ellipse at 50% 60%, rgba(255, 40, 60, .32), transparent 65%); }
-.ministage.m-pre .ms-dark { opacity: .55; }
+function paintMe() {
+  $('me-av').innerHTML = ''; $('me-av').appendChild(avatarEl(me.avatar));
+  $('me-name').textContent = me.name;
+  $('wait-av').innerHTML = ''; $('wait-av').appendChild(avatarEl(me.avatar));
+  $('wait-name').textContent = me.name;
+  $('walk-cap').innerHTML = '';
+  const b = el('b'); b.textContent = me.name;
+  $('walk-cap').append(b, ' sneaks deeper into the haunted hallway…');
+}
 
-/* actors live in a box whose size depends on the screen (keyframes are % of this box) */
-.ms-actors { left: 0; right: 0; top: var(--at, 12%); height: var(--ah, 70%); --mw: min(40vw, 24dvh); --gw: min(46vw, 28dvh); }
-.ministage.m-walk { --at: 10%; --ah: 74%; }
-.ministage.m-locked { --at: 24%; --ah: 50%; }
-.ministage.m-result { --at: 14%; --ah: 50%; }
-.ministage.m-pre .ms-actors { opacity: 0; }
-.ms-actors { top: var(--at); height: var(--ah); }
-.ministage.m-walk .ms-actors { top: 10%; height: 74%; }
-.ministage.m-locked .ms-actors { top: 24%; height: 50%; }
-.ministage.m-result .ms-actors { top: 14%; height: 50%; }
+function sendJoin() {
+  lastJoinSent = Date.now();
+  net.send({ t: 'join', id: pid, name: me.name, avatar: me.avatar });
+}
 
-.ms-mascot { left: calc(50% - var(--mw) / 2); bottom: 6%; width: var(--mw); z-index: 4; }
-.ms-mascot img { width: 100%; display: block; filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .7)); animation: msBob 2.4s ease-in-out infinite; transform-origin: 50% 80%; }
-.ms-mascot::after { content: ''; position: absolute; left: 18%; right: 18%; bottom: -10%; height: 12%; border-radius: 50%; background: radial-gradient(rgba(0, 0, 0, .6), transparent 70%); }
-.ms-glow { left: calc(50% - var(--mw)); bottom: -6%; width: calc(var(--mw) * 2); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(rgba(255, 180, 100, .22), transparent 60%); z-index: 1; }
-.ms-ghost { width: var(--gw); left: -50%; top: 18%; opacity: 0; z-index: 5; filter: drop-shadow(0 0 16px rgba(150, 120, 255, .8)); }
-.ms-redeyes { left: 36%; top: 30%; width: 28%; height: 3%; display: flex; justify-content: space-between; opacity: 0; z-index: 3; }
-.ms-redeyes i { width: 20%; height: 100%; border-radius: 50%; background: #ff2222; box-shadow: 0 0 16px 6px rgba(255, 20, 20, .8); }
-.ms-shield { left: 20%; top: 22%; width: 18%; height: 70%; border: 3px solid rgba(220, 200, 255, .9); border-radius: 50%; opacity: 0; z-index: 6; mix-blend-mode: screen;
-  background: radial-gradient(ellipse at center, rgba(230, 210, 255, 1), rgba(150, 100, 255, .5) 45%, transparent 72%); box-shadow: 0 0 40px 10px rgba(160, 110, 255, .7); }
-.ms-vortex { right: 2%; top: 4%; width: 56%; aspect-ratio: 1; border-radius: 50%; opacity: 0; z-index: 4;
-  background: conic-gradient(from 0deg, transparent, rgba(140, 90, 255, .9), transparent 30%, rgba(80, 220, 200, .8), transparent 60%, rgba(140, 90, 255, .9), transparent);
-  -webkit-mask: radial-gradient(circle, transparent 12%, #000 14%, #000 60%, transparent 70%); mask: radial-gradient(circle, transparent 12%, #000 14%, #000 60%, transparent 70%); }
-.ms-stars { left: 50%; bottom: calc(6% + var(--mw) * .55); font-size: 34px; opacity: 0; z-index: 7; translate: -50% 0; }
-.ms-spark { left: 50%; bottom: calc(6% + var(--mw) * .7); font-size: 52px; opacity: 0; z-index: 7; translate: -50% 0; }
-.ms-boo { left: 50%; top: 0; translate: -50% 0; z-index: 8; opacity: 0; font-family: var(--title); font-size: 64px; color: #fff; background: var(--red); padding: 2px 22px; border-radius: 16px; letter-spacing: 3px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
-.ms-bubble { left: 50%; bottom: calc(10% + var(--mw)); translate: -50% 0; z-index: 9; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
-  background: #fff; color: #23103e; font-weight: 700; font-size: 17px; padding: 8px 16px; border-radius: 16px; opacity: 0; box-shadow: 0 6px 16px rgba(0, 0, 0, .5); }
-.ms-bubble::after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -8px; border: 8px solid transparent; border-bottom: 0; border-top-color: #fff; }
-.ms-bubble.show { animation: msBubble 2.2s ease both; }
-@keyframes msBubble { 0% { opacity: 0; transform: translateY(8px) scale(.6); } 12%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-@keyframes msBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6%) rotate(2deg); } }
+// ---------------- network ----------------
+function connect() {
+  if (net) return;
+  net = createPlayerNet(room, {
+    onHostMsg,
+    onStatus: (s) => $('conn').classList.toggle('hidden', !joined || s === 'SUBSCRIBED'),
+  });
+}
+function disconnect() {
+  if (net && net.close) net.close();
+  net = null;
+  lastSeenAt = 0;
+}
+setInterval(() => {
+  // no heartbeat for a while => show reconnecting hint
+  $('conn').classList.toggle('hidden', !joined || Date.now() - lastSeenAt < 9000);
+}, 2000);
 
-/* --- walking deeper into the hallway --- */
-.ministage.walk .ms-cam { animation: msWalk 2.3s ease-in-out both; }
-@keyframes msWalk { from { transform: scale(1); } to { transform: scale(1.18); } }
-.ministage.walk .ms-mascot img { animation: msStep .55s ease-in-out infinite; }
-@keyframes msStep { 0%, 100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-8%) rotate(5deg); } }
-.ministage.ev .ms-mascot img { animation: msStep .55s ease-in-out 4, msBob 2.4s ease-in-out 2.4s infinite; }
-.ministage.ev .ms-mascot { animation: msStartle .6s ease-out 2.35s both; }
-@keyframes msStartle { 0% { transform: none; } 30% { transform: translateY(-14%) scale(1.06, .94); } 60% { transform: translateY(0) scale(.96, 1.04); } 100% { transform: none; } }
-.ministage.ev-flicker .ms-cam { animation: msWalk 2.3s ease-in-out both, msFlicker 1.5s steps(1) 2.3s both; }
-@keyframes msFlicker { 0% { filter: brightness(1); } 10% { filter: brightness(.15); } 18% { filter: brightness(1.4); } 28% { filter: brightness(.1); } 40% { filter: brightness(1.2); } 52% { filter: brightness(.2); } 64%, 100% { filter: brightness(1); } }
-.ministage.ev-painting .ms-eyes { animation: msEyes 2.2s ease 2.3s both; }
-@keyframes msEyes { 0% { opacity: 0; } 15% { opacity: 1; transform: translateX(0); } 60%, 85% { opacity: 1; transform: translateX(-30%); } 100% { opacity: 0; } }
-.ministage.ev-painting .ms-cam { animation: msWalk 2.3s ease-in-out both, msLookRight 1.6s ease-in-out 2.3s both; }
-@keyframes msLookRight { 0% { transform: scale(1.18); } 40%, 70% { transform: scale(1.32) translate(-8%, 4%); } 100% { transform: scale(1.18); } }
-.ministage.ev-door .ms-cam, .ministage.ev-clock .ms-cam { animation: msWalk 2.3s ease-in-out both, msShake .14s linear 2.3s 7; }
-@keyframes msShake { 0%, 100% { translate: 0 0; } 25% { translate: -1.5% .5%; } 75% { translate: 1.5% -.5%; } }
-.ministage.ev-blackout .ms-dark { animation: msBlack 2.6s ease 2.3s both; }
-.ministage.ev-blackout .ms-redeyes { animation: msRed 2.6s ease 2.3s both; }
-@keyframes msBlack { 0% { opacity: 0; } 8%, 80% { opacity: .93; } 100% { opacity: 0; } }
-@keyframes msRed { 0%, 15% { opacity: 0; } 25%, 45% { opacity: 1; } 48% { opacity: 0; } 52%, 75% { opacity: 1; } 85%, 100% { opacity: 0; } }
+function onHostMsg(m) {
+  if (!m || !m.t) return;
+  lastSeenAt = Date.now();
+  if (m.t === 'hb' && m.th) setTheme(...m.th); // theme of the quiz on the big screen
+  if (pending && m.t === 'hb') {
+    if (m.k && m.k.split(',').includes(pid)) { pending.resolve(true); return onHeartbeat(m); }
+    pending.resolve(true); // the big screen is alive → the PIN is right
+  }
+  switch (m.t) {
+    case 'hb': return onHeartbeat(m);
+    case 'intro': return joined && showIntro();
+    case 'walk': return joined && showWalk(m);
+    case 'pre': return joined && showPre(m);
+    case 'open': return joined && openAnswer(m, m.dur * 1000);
+    case 'reveal': Q.correct = m.correct; return joined && showResult(m.res && m.res[pid], m.q);
+    case 'final': return joined && showFinal(m);
+    case 'reset': if (joined) resetMe(); return;
+    default:
+  }
+}
 
-/* --- my answer was RIGHT: a mysterious force stops the ghost --- */
-.ministage.res-shield .ms-ghost { animation: ghShield 2.4s ease-in-out both; }
-@keyframes ghShield { 0% { left: -50%; opacity: 0; } 15% { opacity: 1; } 32% { left: -2%; transform: scale(1.1); } 38% { left: -4%; transform: scale(.7, 1.15); } 70% { left: -18%; top: -4%; transform: rotate(-260deg) scale(.7); opacity: 1; } 100% { left: -60%; top: -20%; transform: rotate(-540deg) scale(.3); opacity: 0; } }
-.ministage.res-shield .ms-shield { animation: shieldPop 1.8s ease-out .55s both; }
-@keyframes shieldPop { 0% { opacity: 0; transform: scaleY(.2); } 15% { opacity: 1; transform: scaleY(1.1) scaleX(1.6); } 30% { transform: scale(1); } 100% { opacity: 0; } }
-.ministage.res-vortex .ms-vortex { animation: vxOpen 2.4s ease both, vxSpin .8s linear infinite; }
-@keyframes vxOpen { 0% { opacity: 0; transform: scale(.2); } 25%, 75% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.1); } }
-@keyframes vxSpin { to { rotate: 360deg; } }
-.ministage.res-vortex .ms-ghost { animation: ghVortex 2.2s ease-in both; }
-@keyframes ghVortex { 0% { left: 110%; top: 40%; opacity: 0; } 15% { opacity: 1; } 35% { left: 50%; top: 28%; transform: none; } 50% { left: 54%; top: 24%; transform: rotate(20deg); } 100% { left: 60%; top: 14%; transform: rotate(900deg) scale(0); opacity: .2; } }
-.ministage.res-shield .ms-mascot img, .ministage.res-vortex .ms-mascot img { animation: msHappy .4s ease-in-out 1.3s 4 alternate both; }
-@keyframes msHappy { from { transform: translateY(0) scale(1); } to { transform: translateY(-16%) scale(1.06, .95); } }
-.ministage.res-shield .ms-spark, .ministage.res-vortex .ms-spark { animation: sparkUp 1.2s ease-out 1.4s 2 both; }
-@keyframes sparkUp { 0% { opacity: 0; transform: scale(.4); } 50% { opacity: 1; transform: translateY(-40%) scale(1.3) rotate(20deg); } 100% { opacity: 0; transform: translateY(-70%) scale(.8); } }
-/* --- my answer was WRONG: the ghost scares me --- */
-.ministage.res-scare .ms-dark { animation: darkHalf 3.2s ease both; }
-@keyframes darkHalf { 0% { opacity: 0; } 10%, 75% { opacity: .5; } 100% { opacity: .2; } }
-.ministage.res-scare .ms-ghost { animation: ghBoo 3.2s ease-out both; }
-@keyframes ghBoo { 0% { left: 105%; top: 34%; opacity: 0; transform: scale(.6); } 15% { opacity: 1; } 22% { left: 2%; top: -2%; transform: scale(1.4); } 30% { transform: scale(1.55); } 70% { left: 2%; top: -2%; transform: scale(1.4) rotate(-4deg); opacity: 1; } 100% { left: 110%; top: -10%; transform: scale(.8); opacity: 0; } }
-.ministage.res-scare .ms-boo { animation: booPop 1.5s ease .55s both; }
-@keyframes booPop { 0% { opacity: 0; transform: scale(.3); } 20%, 75% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0; transform: scale(1); } }
-.ministage.res-scare .ms-mascot { animation: msFaint 1.2s ease-in .65s both; }
-@keyframes msFaint { 0% { transform: none; } 25% { transform: translateY(-30%) rotate(-200deg); } 55% { transform: translateY(-20%) rotate(-560deg); } 100% { transform: translateY(10%) rotate(-630deg); } }
-.ministage.res-scare .ms-mascot img { animation: none; }
-.ministage.res-scare .ms-stars { animation: starsSpin 1s linear 1.8s 3 both; }
-@keyframes starsSpin { 0% { opacity: 1; transform: rotate(0); } 100% { opacity: 1; transform: rotate(360deg); } }
+function resetMe() {
+  me.score = 0; setScore(0); setRank(0);
+  lastResultQ = -1; Q.answered = -1; Q.i = -1;
+  if (use3D()) { S3.stage.resetHall(); S3.station = -1; }
+  show('wait');
+}
 
-/* ================= views that sit on top of the scene ================= */
-.view { z-index: 2; }
-.view.over { justify-content: space-between; align-items: center; text-align: center; }
-.view.over .bottom { width: 100%; display: flex; flex-direction: column; gap: 10px; align-items: center; }
-.walk-cap { color: #f0e6ff; font-size: 18px; font-weight: 600; text-shadow: 0 2px 8px #000; margin: 0; }
-.qbadge.lg { font-size: 18px; padding: 8px 18px; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
-/* question card (pre / locked) */
-.qcard { width: 100%; background: rgba(255, 255, 255, .96); color: #1d0f38; border-radius: 20px; padding: 18px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5); text-align: center; }
-.qcard .qn { display: inline-block; background: var(--orange); color: #2a1200; font-weight: 700; border-radius: 99px; padding: 3px 12px; font-size: 14px; margin-bottom: 8px; }
-.qcard .qt { font-size: clamp(22px, 6.6vw, 30px); font-weight: 700; line-height: 1.2; }
-.view.pre { justify-content: center; gap: 16px; }
-.preopts { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.preopt { --c: #e5482f; display: flex; align-items: center; gap: 10px; padding: 16px 14px; min-height: 76px; border-radius: 16px; font-weight: 700; color: #fff; background: var(--c); box-shadow: 0 5px 0 rgba(0, 0, 0, .35); text-align: left; font-size: clamp(17px, 4.8vw, 21px); line-height: 1.15; }
-.preopt .shape { font-size: 22px; }
-.mypick { --c: #e5482f; display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 16px; background: var(--c); color: #fff; font-weight: 700; font-size: 20px; box-shadow: 0 6px 0 rgba(0, 0, 0, .35); max-width: 100%; }
-.mypick .shape { font-size: 24px; }
-.hint-line { color: #e8dcff; text-shadow: 0 2px 8px #000; margin: 0; font-size: 15px; }
-/* result */
-.view.result { gap: 10px; padding-top: calc(env(safe-area-inset-top) + 70px); }
-.view.result .verdict { font-size: clamp(46px, 14vw, 64px); text-shadow: 0 4px 0 rgba(0, 0, 0, .5), 0 0 26px currentColor; }
-.res-panel { width: 100%; background: rgba(15, 6, 30, .82); border: 1px solid var(--line); border-radius: 20px; padding: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; backdrop-filter: blur(8px); }
-.res-panel .gain { grid-column: 1; font-size: 28px; background: none; padding: 0; align-self: center; }
-.res-panel .rankbox { grid-column: 2; background: rgba(255, 255, 255, .06); border: 0; padding: 8px; }
-.res-panel .rankbox b { font-size: 38px; }
-.res-panel .rankbox span:last-child { font-size: 13px; }
-.res-panel .streak { grid-column: 1 / -1; min-height: 0; }
-.res-panel .streak:empty { display: none; }
-.correct-ans { grid-column: 1 / -1; font-size: 17px; color: #e8dcff; background: rgba(255, 255, 255, .06); padding: 10px 14px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
-.correct-ans b { color: #fff; font-size: 19px; }
-.correct-ans .shape { font-size: 18px; }
-/* answering */
-.view.answer .qline { font-size: clamp(18px, 5vw, 22px); padding: 14px; }
-.abtn { font-size: clamp(19px, 5.4vw, 24px); }
-.abtn .shape { font-size: 44px; }
-.topbar { padding-right: 14px; }
+function onHeartbeat(m) {
+  if (m.k && m.k.split(',').includes(pid)) { joined = false; document.body.classList.remove('joined'); sess.del('hq-joined'); return show('kicked'); }
+  if (!joined) return;
+  nPlayers = m.n || nPlayers;
+  if (m.th) setTheme(...m.th);
+  $('wait-count').textContent = m.n;
+  $('wait-souls').textContent = isLegacy() ? (m.n === 1 ? 'soul in the castle' : 'souls in the castle') : (m.n === 1 ? 'player in the game' : 'players in the game');
+  if (me.rank) setRank(me.rank);
+  const listed = (m.ids || '').split(',').includes(pid);
+  if (!listed && Date.now() - lastJoinSent > 4000) sendJoin();
+  if (typeof m.total === 'number') Q.total = m.total;
+  // resync if we missed something (refresh / flaky wifi)
+  if (m.ph === 'lobby' && view !== 'wait') show('wait');
+  else if (m.ph === 'intro' && view !== 'intro') showIntro();
+  else if (m.ph === 'walk' && view !== 'walk') showWalk({ i: m.q, total: m.total });
+  else if (m.ph === 'pre' && m.qd && (view !== 'pre' || Q.i !== m.qd.i)) showPre({ ...m.qd, total: m.total });
+  else if (m.ph === 'open' && m.qd && Q.answered !== m.qd.i && (view !== 'answer' || Q.i !== m.qd.i)) openAnswer({ ...m.qd, total: m.total }, m.rem);
+  else if ((m.ph === 'reveal' || m.ph === 'board') && m.res && lastResultQ !== m.q) { if (m.qd) { Q.text = m.qd.text; Q.opts = m.qd.opts; } if (m.cor != null) Q.correct = m.cor; showResult(m.res[pid], m.q); }
+  else if (m.ph === 'final' && view !== 'final' && m.res) showFinal({ res: m.res, top: null });
+}
 
-/* ================= v6: 3D hallway on the phone ================= */
-.stage3d { position: fixed; inset: 0; z-index: 1; background: #050208; opacity: 0; visibility: hidden; transition: opacity .45s, visibility .45s; }
-.stage3d.on { opacity: 1; visibility: visible; }
-.stage3d .stage-canvas { transition: filter .45s; }
-.stage3d.dim .stage-canvas { filter: brightness(.42) saturate(.8); }
-.stage3d .bubble { font-size: 16px; padding: 7px 14px; max-width: 86vw; white-space: normal; text-align: center; }
-.stage3d .bubble.boo { font-size: 46px; }
-/* soft vignette so the cards on top stay readable */
-.stage3d::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
-  background: linear-gradient(rgba(5, 2, 8, .6), transparent 20%, transparent 64%, rgba(5, 2, 8, .85)); }
-.prep { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; margin: 4px 0 0; }
-.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .25); border-top-color: var(--orange); animation: spin .8s linear infinite; flex: none; }
-@keyframes spin { to { transform: rotate(360deg); } }
+// ---------------- 2D fallback scene (phones without WebGL) ----------------
+const EVENTS = ['flicker', 'painting', 'door', 'clock', 'blackout'];
+const EVENT_TEXT = {
+  flicker: 'Eek! The lights! 😨', painting: 'Did… did she just look at me?! 😨', door: 'Knock… knock… 🚪 Who’s there?!',
+  clock: 'DONG… DONG… 🕛', blackout: 'I-it’s so dark… 👀',
+};
+const MS = $('ms');
+let bubbleT = 0;
+const STAGE_VIEWS = { walk: 'walk', pre: 'pre', locked: 'locked', result: 'result' };
+function playStage(mode, cls = '', bubble = '', bubbleAt = 0) {
+  if (use3D() || !isLegacy()) return;
+  $('ms-mascot-img').src = avatarSrc(me.avatar) || MASCOT.sprite; // the mascot is MY avatar
+  MS.className = `ministage on m-${mode}`;
+  void MS.offsetWidth; // restart CSS animations
+  MS.className = `ministage on m-${mode} ${cls}`;
+  const b = $('ms-bubble');
+  b.classList.remove('show');
+  clearTimeout(bubbleT);
+  if (bubble) bubbleT = setTimeout(() => { b.textContent = bubble; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }, bubbleAt);
+}
+function stageOff() { MS.classList.remove('on'); clearTimeout(bubbleT); }
 
-/* intro over the 3D scene */
-body.has3d #v-intro { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top) + 90px); }
-body.has3d #v-intro .bolt { display: none; }
-body.has3d #v-intro h2 { font-size: clamp(30px, 9vw, 40px); text-shadow: 0 0 20px rgba(255, 90, 40, .8), 0 3px 0 #000; animation: fadeIn .8s both; }
-body.has3d #v-intro p { color: #e8dcff; text-shadow: 0 2px 8px #000; }
-@keyframes fadeIn { from { opacity: 0; } }
+// ---------------- themed 2D scene (non-Halloween) ----------------
+const TS = $('ts');
+let tsLineT = 0;
+function tsMode(v, extra = '') {
+  if (isLegacy()) { TS.className = 'tscene'; return; }
+  $('ts-av').src = avatarSrc(me.avatar);
+  const keep = v === 'result' ? extra : '';
+  TS.className = `tscene on m-${v} ${keep}`;
+  if (v !== 'result') { clearTimeout(tsLineT); $('ts-line').className = 'ts-line'; }
+}
+/** play a scene: cls = CSS animation, line = what my avatar says (shown under it) */
+function tsPlay(v, cls, line = '', at = 0, bad = false) {
+  TS.className = `tscene on m-${v}`;
+  void TS.offsetWidth; // restart the CSS animations
+  TS.className = `tscene on m-${v} ${cls}`;
+  const b = $('ts-line');
+  b.className = 'ts-line';
+  clearTimeout(tsLineT);
+  if (line) tsLineT = setTimeout(() => { b.textContent = line; b.className = 'ts-line show' + (bad ? ' bad' : ''); }, at);
+}
 
-/* ---------- top bar: me + score ---------- */
-.topbar { gap: 10px; padding: calc(env(safe-area-inset-top) + 8px) 10px 8px 10px; background: linear-gradient(180deg, rgba(14, 6, 30, .94), rgba(14, 6, 30, .8)); }
-.topbar .me { flex: 1; }
-.me-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.1; }
-.me-txt b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
-.me-txt small { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .3px; }
-.me-txt small.lead { color: var(--gold); }
-.scorepill { position: relative; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 5px; border-radius: 99px;
-  background: linear-gradient(180deg, #3b1c70, #22103f); border: 1.5px solid rgba(255, 209, 102, .65);
-  box-shadow: 0 0 14px rgba(255, 190, 80, .18), inset 0 1px 0 rgba(255, 255, 255, .15); }
-.sp-ic { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #4a2a00;
-  background: radial-gradient(circle at 35% 30%, #fff3b0, #ffc23d 55%, #e08a00); box-shadow: 0 2px 0 #9a5a00; }
-.sp-ic svg { width: 16px; height: 16px; }
-.scorepill b { font-size: 18px; color: #ffe08a; font-variant-numeric: tabular-nums; letter-spacing: .3px; min-width: 1ch; }
-.scorepill.bump { animation: spBump .6s cubic-bezier(.2, 1.6, .4, 1); }
-@keyframes spBump { 30% { transform: scale(1.15); box-shadow: 0 0 26px rgba(255, 200, 80, .7); } }
-.sp-gain { position: absolute; right: 8px; top: 100%; font-weight: 700; font-size: 15px; color: var(--green); text-shadow: 0 2px 6px #000; opacity: 0; pointer-events: none; white-space: nowrap; }
-.sp-gain.show { animation: spGain 1.8s ease-out both; }
-@keyframes spGain { 0% { opacity: 0; transform: translateY(8px) scale(.7); } 20% { opacity: 1; transform: translateY(4px) scale(1.1); } 80% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-14px); } }
-.leave { display: flex; align-items: center; gap: 5px; height: 36px; padding: 0 11px; border-radius: 99px; border: 1px solid rgba(255, 140, 150, .4); background: rgba(255, 77, 94, .12); color: #ffb3b9; font: 600 13px var(--body); }
-.leave:active { background: rgba(255, 77, 94, .3); }
-@media (max-width: 360px) { .leave span { display: none; } .leave { padding: 0 9px; } }
+// ---------------- the 3D hub (same as the big screen) ----------------
+async function initHub3D() {
+  if (isLegacy() || !can3D || H3.state !== 'off') return;
+  H3.state = 'loading';
+  try {
+    const { HubStage } = await import('./hubstage.js');
+    const st = new HubStage($('ts-3d'), { lite: true });
+    st.paused = true;
+    H3.stage = st;
+    await Promise.race([
+      st.load(THEME.id, PAL.id),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('3D took too long to load')), 45000)),
+    ]);
+    H3.key = THEME.id + '|' + PAL.id;
+    st.setGreeting(GREET || THEME.greeting || '', THEME.id);
+    st.setMode('lobby');
+    st.paused = true;
+    H3.state = 'ready';
+    hubView(view);
+    if (joined && view === 'wait' && !H3.entered) hubEnter();
+  } catch (e) {
+    console.warn('[3D hub] using the picture instead:', e);
+    H3.state = 'failed';
+    try { H3.stage && H3.stage.renderer.setAnimationLoop(null); } catch (x) { /* */ }
+    H3.stage = null;
+    $('ts-3d').innerHTML = '';
+    hubView(view);
+  }
+}
+const hub3D = () => H3.state === 'ready' && !isLegacy();
+// per view: [frame (+ = hub lower on the screen), keep animating?]
+const HUB_VIEW = { wait: [0.2, 1], intro: [0.12, 1], walk: [0.14, 1], pre: [0.18, 0], answer: [0.18, 0], locked: [0.2, 1], result: [0.13, 1], final: [0.2, 1] };
+function hubView(v) {
+  const box = $('ts-3d'), c = HUB_VIEW[v];
+  document.body.classList.toggle('hub3d', hub3D());
+  clearTimeout(H3.freezeT);
+  if (!hub3D()) { box.classList.remove('on', 'dim'); if (H3.stage) H3.stage.paused = true; return; }
+  const st = H3.stage;
+  box.classList.toggle('on', !!c);
+  box.classList.toggle('dim', v === 'pre' || v === 'answer' || v === 'final');
+  if (!c) { st.paused = true; return; }
+  st.paused = false;
+  st.setFrame(c[0], 0.5);
+  if (v === 'wait') st.setMode('lobby');
+  if (v === 'final') st.setMode('final');
+  // a still picture behind the question cards (saves battery while answering)
+  if (!c[1]) H3.freezeT = setTimeout(() => { if (view === v) st.paused = true; }, 800);
+}
+function hubEnter() {
+  if (!hub3D()) return;
+  H3.entered = true;
+  H3.stage.setMode('lobby');
+  H3.stage.playEnter();
+}
+function fxPlay(name, opts = {}) {
+  if (!fx) fx = createFx($('ts-fx'));
+  fx.resize();
+  fx.clear();
+  fx.play(name, { colors: [PAL.accent, PAL.accent2, '#ffffff', '#06d6a0', '#ff4d6d'], n: 14, ...opts });
+}
 
-/* ---------- question number badges ---------- */
-.qcard .qn, .qbadge.lg { display: inline-flex; align-items: baseline; gap: 4px; background: linear-gradient(160deg, #3e1c74, #1c0b38); color: #fff; border: 1.5px solid rgba(255, 138, 31, .85);
-  box-shadow: 0 0 14px rgba(255, 120, 0, .3); border-radius: 99px; padding: 4px 14px; font-weight: 700; font-size: 14px; letter-spacing: .5px; }
-.qcard .qn small, .qbadge.lg small { color: rgba(255, 255, 255, .6); font-size: .9em; }
-.qbadge.lg { font-size: 17px; padding: 7px 18px; }
-.walk-cap b { color: var(--orange2); }
+// ---------------- question flow ----------------
+const qnum = (i, n) => `Question ${i + 1} <small>/ ${n}</small>`;
 
-/* ---------- question first (no answers yet) ---------- */
-.view.pre { justify-content: flex-start; gap: 14px; }
-.view.pre .qcard { margin-top: 2vh; animation: cardIn .5s cubic-bezier(.2, 1.4, .4, 1) both; }
-.view.pre .qcard .qt { font-size: clamp(24px, 7.4vw, 34px); }
-.view.pre.with-media .qcard .qt { font-size: clamp(21px, 6.2vw, 28px); }
-.pre-foot { margin-top: auto; width: 100%; display: flex; flex-direction: column; gap: 10px; }
-@keyframes cardIn { from { opacity: 0; transform: translateY(-24px) scale(.92); } }
-.mediabox { width: 100%; display: flex; justify-content: center; }
-.mediabox .qmedia { display: block; max-width: 100%; max-height: 34dvh; width: auto; height: auto; object-fit: contain; border-radius: 16px; background: #000;
-  border: 3px solid rgba(255, 255, 255, .92); box-shadow: 0 12px 30px rgba(0, 0, 0, .6); animation: cardIn .5s .1s cubic-bezier(.2, 1.4, .4, 1) both; }
-.mediabox.sm .qmedia { max-height: 19dvh; border-width: 2px; border-radius: 12px; animation: none; }
+// one media element per question, moved between the "read" and "answer" screens
+let mediaNode = null, mediaUrl = '';
+function putMedia(box, media) {
+  box.innerHTML = '';
+  box.classList.toggle('hidden', !media);
+  if (!media) return;
+  if (mediaUrl !== media.url || !mediaNode) { mediaNode = mediaEl(media, 'qmedia'); mediaUrl = media.url; }
+  box.appendChild(mediaNode);
+  kickVideo(mediaNode.querySelector && mediaNode.querySelector('video')); // moving a video in the page pauses it
+}
 
-/* ---------- answering: question + countdown + 4 big buttons ---------- */
-.view.answer { gap: 10px; background: rgba(8, 3, 18, .35); }
-.ahead { display: flex; align-items: stretch; gap: 10px; background: rgba(255, 255, 255, .96); color: #1d0f38; border-radius: 18px; padding: 10px 10px 10px 14px; box-shadow: 0 10px 26px rgba(0, 0, 0, .45); }
-.ahead-q { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; justify-content: center; }
-.ahead-q .qn { align-self: flex-start; font-size: 12px; font-weight: 700; color: #6a3fc8; background: #efe6ff; border-radius: 99px; padding: 2px 9px; }
-.ahead-q .qt { font-weight: 700; font-size: clamp(17px, 4.9vw, 22px); line-height: 1.2; }
-.cd { position: relative; flex: none; width: 66px; height: 66px; display: grid; place-items: center; align-self: center; }
-.cd svg { position: absolute; inset: 0; transform: rotate(-90deg); }
-.cd circle { fill: #1d0f38; stroke: #e7dcff; stroke-width: 5; }
-.cd circle.prog { fill: none; stroke: var(--orange); stroke-linecap: round; transition: stroke .3s; }
-.cd b { position: relative; color: #fff; font-size: 25px; line-height: 1; margin-top: -6px; font-variant-numeric: tabular-nums; }
-.cd small { position: absolute; bottom: 12px; color: rgba(255, 255, 255, .6); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
-.cd.urgent circle.prog { stroke: var(--red); }
-.cd.urgent circle:first-child { fill: #6a0f1d; }
-.cd.tick { animation: cdTick .35s ease-out; }
-@keyframes cdTick { 40% { transform: scale(1.14); } }
-.tbar { height: 8px; }
-.tbar i { border-radius: 99px; }
-.view.answer .abtns { min-height: 50dvh; }
-.view.answer.with-media .abtns { min-height: 38dvh; }
+// the same cinematic as the big screen: haunted house → thunder → castle gate opens →
+// MY avatar sneaks into the hallway. Players can't skip it (only the host can, for everyone).
+function showIntro() {
+  show('intro');
+  if (!isLegacy()) {
+    $('intro-title').textContent = THEME.copy.intro;
+    $('intro-sub').textContent = `Good luck, ${me.name}! 🍀`;
+    $('v-intro').classList.remove('inside');
+    tsPlay('intro', 'enter');
+    if (hub3D()) {
+      const st = H3.stage;
+      st.setMode('game'); st.playEnter();
+      const d = st.current && st.current.deco;
+      if (d && d.santa) d.fly('intro');          // Christmas: Santa circles the tree on the phones too
+    }
+    setTimeout(() => { if (view === 'intro') fxPlay('burst'); }, hub3D() ? 1900 : 700);
+    return;
+  }
+  $('intro-title').textContent = 'Enter… if you dare!';
+  $('intro-sub').textContent = use3D() ? '' : 'Look at the big screen!';
+  $('v-intro').classList.remove('inside');
+  if (!use3D()) return;
+  S3.station = -1;
+  S3.stage.playIntro({
+    onThunder: () => buzz([40, 30, 90]),
+    onDoor: () => buzz([20, 60, 20]),
+    onHall: () => {
+      $('v-intro').classList.add('inside');
+      $('intro-title').textContent = `${me.name} sneaks into the haunted hallway…`;
+      $('intro-sub').textContent = 'Something is watching… 👀';
+    },
+  });
+}
 
-/* ---------- result: let the scene play, then slide the panel in ---------- */
-.res-panel.late { animation: panelUp .5s cubic-bezier(.2, 1.3, .4, 1) 2.6s both; }
-@keyframes panelUp { from { opacity: 0; transform: translateY(40px); } }
-body.has3d .view.result .verdict { margin-top: 1vh; }
-body.has3d.good, body.has3d.bad { background: #050208; }
-body.has3d .view.result .verdict { font-size: clamp(40px, 12vw, 56px); }
-.mediabox .vwrap { width: 100%; }
+function showWalk(m) {
+  Q.total = m.total || Q.total;
+  if (m.media) preloadMedia(m.media); // start downloading the picture/video early
+  $('walk-num').innerHTML = qnum(m.i, Q.total);
+  show('walk');
+  if (!isLegacy()) {
+    if (fx) fx.clear();
+    $('walk-cap').textContent = THEME.copy.walk;
+    tsPlay('walk', 'hop');
+    if (hub3D()) H3.stage.walkTo(m.i);
+  } else if (use3D()) {
+    S3.station = m.i;
+    S3.stage.walkTo(m.i, FX3);
+  } else {
+    const ev = EVENTS[m.i % EVENTS.length];
+    playStage('walk', `walk ev ev-${ev}`, EVENT_TEXT[ev], 2400);
+  }
+}
 
-/* v7: no bottom decoration once you're in (it looked odd behind the waiting room) */
-body.joined .night-bg .bushes, body.joined .night-bg .fog { display: none; }
-body.joined .night-bg { background: radial-gradient(ellipse at 50% 110%, rgba(255, 110, 60, .22), transparent 55%), radial-gradient(ellipse at 20% 10%, rgba(120, 60, 220, .35), transparent 50%), linear-gradient(180deg, #0b0518 0%, #1d0d3a 60%, #2a1040 100%); }
-#btn-join { display: flex; align-items: center; justify-content: center; gap: 10px; }
-#btn-join .spin { width: 18px; height: 18px; border-width: 3px; border-color: rgba(42, 18, 0, .25); border-top-color: #2a1200; }
-.shake { animation: shake .45s; border-color: var(--red) !important; }
-@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
-#v-join .err { line-height: 1.35; }
-/* intro: title on top while outside, then it moves down once inside the hallway */
-body.has3d #v-intro.inside { justify-content: flex-end; padding-bottom: calc(env(safe-area-inset-bottom) + 40px); }
-body.has3d #v-intro.inside h2 { font-size: clamp(24px, 7vw, 32px); }
-.pin-err { min-height: 0; font-size: 14px; text-align: left; font-weight: 600; }
-.pin-err:empty { display: none; }
+// 1) read the question first — NO answers yet
+function showPre(m) {
+  Q.i = m.i; Q.total = m.total || Q.total; Q.text = m.text; Q.opts = m.opts || []; Q.media = m.media || null;
+  $('pre-num').innerHTML = qnum(m.i, Q.total);
+  $('pre-text').textContent = m.text;
+  putMedia($('pre-media'), Q.media);
+  $('v-pre').classList.toggle('with-media', !!Q.media);
+  show('pre');
+  atStation(m.i);
+  playStage('pre');
+  const pv = m.pv == null ? CONFIG.QUESTION_PREVIEW : m.pv;
+  const bar = $('pre-bar');
+  bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)'; void bar.offsetWidth;
+  if (pv > 0) { bar.style.transition = `transform ${pv}s linear`; bar.style.transform = 'scaleX(0)'; }
+}
 
-/* ================= BOS Quiz themes (Classic / Summer / Lunar New Year) ================= */
-.logo small { display: block; font-family: var(--body); font-weight: 800; font-size: 14px; letter-spacing: 4px; text-transform: uppercase; color: var(--accent2, #c9a8ff); margin-top: 8px; text-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
-.logo small:empty { display: none; }
-.logo span { display: block; }
-.tscene { position: fixed; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; display: none; }
-.tscene.on { display: block; }
-body.hubtheme { background: linear-gradient(170deg, var(--sky1), var(--sky2)); }
-body.hubtheme .night-bg { display: none; }
-body.hubtheme.good, body.hubtheme.bad { background: linear-gradient(170deg, var(--sky1), var(--sky2)); }
-body.hubtheme .logo { color: #fff; text-shadow: 0 4px 0 rgba(0, 0, 0, .2), 0 0 24px rgba(0, 0, 0, .25); }
-body.hubtheme .verdict.good { color: #fff; text-shadow: 0 4px 0 rgba(0, 0, 0, .25), 0 0 26px var(--green); }
-body.hubtheme .verdict.bad { color: #fff; text-shadow: 0 4px 0 rgba(0, 0, 0, .25), 0 0 26px var(--red); }
-body.hubtheme .walk-cap, body.hubtheme .hint-line { text-shadow: 0 2px 8px rgba(0, 0, 0, .55); }
-.ts-bg { position: absolute; inset: 0; background: linear-gradient(170deg, var(--sky1), var(--sky2)); }
-.ts-deco { position: absolute; display: block; }
-/* classic: soft floating bubbles */
-[data-theme=default] .ts-deco { width: 46vw; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .28), rgba(255, 255, 255, .04) 60%, transparent 70%); animation: tsFloat 9s ease-in-out infinite alternate; }
-[data-theme=default] .ts-deco.d1 { left: -12vw; top: 8vh; }
-[data-theme=default] .ts-deco.d2 { right: -14vw; top: 34vh; width: 60vw; animation-delay: -3s; }
-[data-theme=default] .ts-deco.d3 { left: 22vw; bottom: 10vh; width: 30vw; animation-delay: -6s; }
-@keyframes tsFloat { to { transform: translate(4vw, -5vh) scale(1.08); } }
-/* summer: sun + rolling waves */
-[data-theme=summer] .ts-deco.d1 { right: -10vw; top: 6vh; width: 48vw; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, #fff6c8 0 30%, rgba(255, 220, 120, .55) 46%, rgba(255, 220, 120, 0) 70%); animation: tsSun 6s ease-in-out infinite alternate; }
-@keyframes tsSun { to { transform: scale(1.08); } }
-[data-theme=summer] .ts-deco.d2, [data-theme=summer] .ts-deco.d3 { left: -50%; right: -50%; bottom: 0; height: 22vh;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40'%3E%3Cpath d='M0 20 Q25 0 50 20 T100 20 T150 20 T200 20 V40 H0Z' fill='%231d7fd0'/%3E%3C/svg%3E") repeat-x bottom / 33.3% 100%; animation: tsWave 7s linear infinite; opacity: .85; }
-[data-theme=summer] .ts-deco.d3 { height: 16vh; opacity: .9; filter: brightness(1.25); animation-duration: 5s; animation-direction: reverse; }
-@keyframes tsWave { to { transform: translateX(33.3%); } }
-/* lunar: hanging lanterns swaying */
-[data-theme=lunar] .ts-deco { top: -2vh; width: 15vw; max-width: 90px; aspect-ratio: 3 / 4; border-radius: 45% 45% 40% 40%; background: radial-gradient(ellipse at 50% 45%, #ffcf5a 0 8%, #f0302b 40%, #b8121d 72%); box-shadow: 0 0 30px rgba(255, 170, 60, .55); transform-origin: 50% -30vh; animation: tsSway 3.8s ease-in-out infinite alternate; }
-[data-theme=lunar] .ts-deco::before { content: ''; position: absolute; left: 50%; bottom: 100%; width: 2px; height: 30vh; background: rgba(255, 210, 90, .6); }
-[data-theme=lunar] .ts-deco::after { content: ''; position: absolute; left: 44%; top: 100%; width: 12%; height: 40%; background: #ffcc33; border-radius: 0 0 4px 4px; }
-[data-theme=lunar] .ts-deco.d1 { left: 6vw; top: 4vh; }
-[data-theme=lunar] .ts-deco.d2 { right: 8vw; top: 10vh; animation-delay: -1.3s; }
-[data-theme=lunar] .ts-deco.d3 { left: 42vw; top: -6vh; width: 11vw; animation-delay: -2.4s; opacity: .85; }
-@keyframes tsSway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+function showLocked(choice, note) {
+  $('lk-num').innerHTML = qnum(Q.i, Q.total);
+  $('lk-text').textContent = Q.text || '';
+  const p = $('picked');
+  p.innerHTML = '';
+  if (choice == null) { p.style.setProperty('--c', '#3a2f4a'); p.textContent = '⌛ No answer'; }
+  else { const st = ANSWER_STYLES[choice]; p.style.setProperty('--c', st.color); p.innerHTML = `<span class="shape">${SHAPES[st.shape]}</span><span></span>`; p.lastChild.textContent = 'Your answer: ' + (Q.opts[choice] || ''); }
+  $('locked-time').textContent = note || '';
+  show('locked');
+  atStation(Q.i);
+  playStage('locked');
+}
 
-.ts-hub { position: absolute; left: 50%; bottom: -2vh; width: min(124vw, 680px); translate: -50% 0; filter: drop-shadow(0 14px 24px rgba(0, 0, 0, .3)); transition: opacity .4s, filter .4s; animation: tsHubBob 5s ease-in-out infinite alternate; }
-@keyframes tsHubBob { to { transform: translateY(-1.6vh); } }
-.tscene.m-join .ts-hub { opacity: .3; }
-.tscene.m-pre .ts-hub, .tscene.m-answer .ts-hub, .tscene.m-final .ts-hub { opacity: .45; filter: blur(1px) drop-shadow(0 14px 24px rgba(0, 0, 0, .3)); }
-.tscene.m-kicked .ts-hub { opacity: .25; }
-.tscene { --me-top: 36%; --me-w: min(44vw, 27dvh); }
-.ts-me { position: absolute; left: 50%; top: var(--me-top); width: var(--me-w); translate: -50% -50%; opacity: 0; transition: opacity .3s; }
-.ts-me img { width: 100%; display: block; filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)); animation: tsBob 2.4s ease-in-out infinite; }
-@keyframes tsBob { 50% { transform: translateY(-5%) rotate(2deg); } }
-.tscene.m-intro .ts-me, .tscene.m-walk .ts-me, .tscene.m-result .ts-me, .tscene.m-locked .ts-me { opacity: 1; }
-.tscene.m-locked { --me-top: 44%; --me-w: min(34vw, 20dvh); }
-.tscene.m-result { --me-top: 37%; }
-/* my line under my avatar (no speech bubble, so nothing covers it) */
-.ts-line { position: absolute; z-index: 4; left: 50%; top: calc(var(--me-top) + var(--me-w) * .5 + 2px); translate: -50% 0; white-space: nowrap; font: 800 clamp(20px, 6.2vw, 27px)/1.1 var(--body); color: #fff; letter-spacing: .3px;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, .35), 0 0 14px rgba(0, 0, 0, .5); opacity: 0; }
-.ts-line.show { animation: tsLine .6s cubic-bezier(.2, 1.5, .4, 1) both; }
-@keyframes tsLine { from { opacity: 0; transform: translateY(12px) scale(.85); } to { opacity: 1; transform: none; } }
-.ts-line.bad { color: #ffe1e4; }
-.ts-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; }
-/* intro: the hub rises, my avatar drops in */
-.tscene.enter .ts-hub { animation: tsRise 1.2s cubic-bezier(.2, 1.2, .4, 1) both, tsHubBob 5s 1.2s ease-in-out infinite alternate; }
-@keyframes tsRise { from { transform: translateY(16vh) scale(2.3) rotate(-24deg); opacity: 0; } 60% { opacity: 1; } }
-.tscene.enter .ts-me { animation: tsDrop 1.1s .5s cubic-bezier(.3, 1.5, .5, 1) both; }
-@keyframes tsDrop { from { transform: translateY(-60vh) rotate(-30deg); } }
-/* next question: the world turns, I hop */
-.tscene.hop .ts-hub { animation: tsTurn 1.6s ease-in-out both, tsHubBob 5s 1.6s ease-in-out infinite alternate; }
-@keyframes tsTurn { 0% { transform: none; } 45% { transform: scale(1.16) rotate(7deg); } 100% { transform: none; } }
-.tscene.hop .ts-me img { animation: tsHop .55s ease-in-out 3, tsBob 2.4s 1.65s ease-in-out infinite; }
-@keyframes tsHop { 50% { transform: translateY(-22%) scale(1.04, .96); } }
-/* my answer was RIGHT */
-.tscene.res-good .ts-me::before { content: ''; position: absolute; inset: -30%; border-radius: 50%; background: radial-gradient(circle, rgba(255, 240, 160, .75), rgba(255, 220, 120, 0) 65%); animation: tsGlow 1.6s ease-out both; }
-@keyframes tsGlow { from { transform: scale(.2); opacity: 0; } 40% { opacity: 1; } to { transform: scale(1.1); opacity: .7; } }
-.tscene.res-good .ts-me img { animation: tsJoy 1.3s cubic-bezier(.3, 1.4, .5, 1) both, tsBob 2.4s 1.3s ease-in-out infinite; }
-@keyframes tsJoy { 0% { transform: scale(.8); } 30% { transform: translateY(-28%) rotate(-12deg) scale(1.1); } 55% { transform: translateY(0) rotate(360deg) scale(1); } 75% { transform: translateY(-10%) rotate(360deg); } 100% { transform: rotate(360deg); } }
-/* my answer was WRONG */
-.tscene.res-bad .ts-me img { filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)) grayscale(.35); }
-.tscene.bad-rain .ts-me img { animation: tsSad 1.6s ease-in-out .5s both; }
-@keyframes tsSad { 30% { transform: translateY(4%) rotate(-6deg); } 100% { transform: translateY(6%) rotate(-10deg) scale(.95); filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)) grayscale(.6) brightness(.8); } }
-.tscene.bad-wave .ts-me img { animation: tsSplash 2.6s ease-in-out .8s both; }
-@keyframes tsSplash { 0% { transform: none; } 18% { transform: translateX(28%) rotate(40deg); } 32% { transform: translateX(-12%) rotate(-25deg); } 50% { transform: translateX(6%) rotate(10deg); } 100% { transform: translateY(4%) rotate(-6deg); filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)) hue-rotate(160deg) saturate(.6) brightness(.95); } }
-.tscene.bad-wave .ts-me::after { content: '💧'; position: absolute; right: 8%; top: 18%; font-size: 30px; opacity: 0; animation: tsDrip 1.2s ease-in 2.4s 2 both; }
-@keyframes tsDrip { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(80px); } }
-.tscene.bad-fizzle .ts-me img { animation: tsCough .18s linear 1.6s 6, tsSoot 1s ease 1.6s both; }
-@keyframes tsCough { 50% { transform: translateX(-4%) rotate(-3deg); } }
-@keyframes tsSoot { to { filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)) grayscale(.8) brightness(.65); } }
-.tscene.bad-fizzle { --me-top: 33%; --me-w: min(36vw, 21dvh); }
-/* the cards on top of a bright scene */
-body.hubtheme .qcard, body.hubtheme .ahead { box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
-body.hubtheme .view.answer { background: rgba(0, 0, 0, .12); }
-body.hubtheme .souls, body.hubtheme .rankbox, body.hubtheme .res-panel { background: var(--panel); }
-body.hubtheme #v-wait h2, body.hubtheme #v-wait .muted, body.hubtheme #v-wait .ok { text-shadow: 0 2px 8px rgba(0, 0, 0, .45); }
-body.hubtheme #v-wait .ok { color: #fff; }
-body.hubtheme .me-big .av::before, body.hubtheme .av::before { background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 70%); }
-body.hubtheme #v-wait { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top) + 90px); }
-body.hubtheme .intro .bolt { display: none; }
-body.hubtheme #v-intro h2 { font-family: var(--title); font-weight: var(--title-weight); text-shadow: 0 4px 0 rgba(0, 0, 0, .25), 0 0 24px rgba(0, 0, 0, .3); }
-body.hubtheme #v-intro { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top) + 58vh); }
-body.hubtheme #v-intro p { color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
-body.hubtheme #v-wait .muted { color: #fff; opacity: .9; }
-body.hubtheme .walk-cap { color: #fff; }
-.abtns[data-n="3"] .abtn:nth-child(3) { grid-column: span 2; }
-.abtns[data-n="2"] { grid-template-columns: 1fr; }
-.abtns[data-n="2"] .abtn { flex-direction: row; gap: 14px; font-size: clamp(22px, 6.4vw, 30px); }
+// 2) the answers appear (question + picture stay on screen) + countdown
+function openAnswer(m, remainingMs) {
+  if (Q.answered === m.i) return;
+  Q.i = m.i; Q.dur = (m.dur || CONFIG.QUESTION_TIME) * 1000; Q.total = m.total || Q.total; Q.text = m.text; Q.opts = m.opts; Q.media = m.media || null;
+  Q.openAt = performance.now() - (Q.dur - (remainingMs ?? Q.dur));
+  $('ans-num').textContent = `${m.i + 1}/${Q.total}`;
+  $('ans-text').textContent = m.text;
+  putMedia($('ans-media'), Q.media);
+  $('v-answer').classList.toggle('with-media', !!Q.media);
+  const box = $('abtns');
+  box.innerHTML = '';
+  box.classList.remove('done');
+  box.dataset.n = m.opts.length;
+  m.opts.forEach((o, i) => {
+    const st = ANSWER_STYLES[i];
+    const b = el('button', 'abtn');
+    b.style.setProperty('--c', st.color); b.style.setProperty('--d', st.dark);
+    b.innerHTML = `<span class="shape">${SHAPES[st.shape]}</span><span class="t"></span>`;
+    b.querySelector('.t').textContent = o;
+    b.onclick = () => answer(i, b);
+    box.appendChild(b);
+  });
+  show('answer');
+  atStation(m.i);
+  buzz(20);
+  runTimer();
+}
 
-/* ---- v9: the real 3D hub on phones (same as the big screen) ---- */
-.ts3d { position: absolute; inset: 0; opacity: 0; transition: opacity .7s; }
-.ts3d.on { opacity: 1; }
-.ts3d.on ~ .ts-hub { display: none; }
-.ts3d::after { content: ''; position: absolute; inset: 0; z-index: 3; background: var(--panel-solid, #1d0f38); opacity: 0; transition: opacity .45s; pointer-events: none; }
-.ts3d.dim::after { opacity: .38; }
-.ts3d .stage-canvas { animation: none; }
-body.hub3d .tscene.m-wait .ts-me, body.hub3d .tscene.m-final .ts-me { opacity: 0; }
-/* readable on top of the scene (waves, sand, clouds…) */
-body.hubtheme .pre-foot { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 10px 14px 12px; box-shadow: 0 10px 24px rgba(0, 0, 0, .25); backdrop-filter: blur(6px); }
-body.hubtheme .pre-foot .hint-line { text-shadow: none; color: #fff; font-weight: 600; }
-body.hubtheme .walk-cap { background: var(--panel); border: 1px solid var(--line); padding: 8px 18px; border-radius: 99px; text-shadow: none; font-size: 16px; }
-body.hubtheme #v-locked .hint-line { background: var(--panel); padding: 6px 14px; border-radius: 99px; text-shadow: none; color: #fff; }
+function runTimer() {
+  cancelAnimationFrame(Q.timerRAF);
+  const bar = $('tbar'), num = $('tnum'), ring = $('cd-prog'), cd = $('cd');
+  let lastSec = -1;
+  const loop = () => {
+    if (view !== 'answer') return;
+    const left = Math.max(0, Q.dur - (performance.now() - Q.openAt));
+    const k = left / Q.dur;
+    bar.style.transform = `scaleX(${k})`;
+    ring.style.strokeDashoffset = String(163.36 * (1 - k));
+    const sec = Math.ceil(left / 1000);
+    if (sec !== lastSec) {
+      num.textContent = sec;
+      const urgent = left < 5000;
+      cd.classList.toggle('urgent', urgent);
+      bar.parentElement.classList.toggle('urgent', urgent);
+      if (urgent && sec > 0) { cd.classList.remove('tick'); void cd.offsetWidth; cd.classList.add('tick'); buzz(8); }
+      lastSec = sec;
+    }
+    if (left <= 0) { showLocked(null, "Time's up!"); return; }
+    Q.timerRAF = requestAnimationFrame(loop);
+  };
+  loop();
+}
 
-/* ---- v10: Christmas / Mid-Autumn / Japanese restaurant ---- */
-/* my avatar when I'm wrong */
-.tscene.bad-snowball .ts-me img { animation: tsHit .5s ease-out .6s both, tsShiver .12s linear 1.1s 10; }
-.tscene.bad-snowball .ts-me::after { content: ''; position: absolute; left: 18%; top: 8%; width: 46%; height: 40%; border-radius: 50%; background: radial-gradient(circle at 45% 40%, #fff 0 45%, rgba(255, 255, 255, .85) 60%, rgba(255, 255, 255, 0) 72%); opacity: 0; animation: tsSplat .3s ease-out .65s both; }
-@keyframes tsHit { 0% { transform: none; } 30% { transform: translateX(-10%) rotate(-14deg) scale(.95); } 100% { transform: translateY(3%) rotate(-6deg); filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)) grayscale(.55) brightness(1.18) contrast(.9); } }
-@keyframes tsShiver { 50% { translate: 3px 0; } }
-@keyframes tsSplat { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: none; } }
-.tscene.bad-eclipse .ts-me img { animation: tsDim 1.6s ease .4s both; }
-@keyframes tsDim { to { transform: translateY(5%) rotate(-8deg) scale(.94); filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)) brightness(.45) saturate(.6); } }
-.tscene.bad-wasabi .ts-me img { animation: tsSpicy .14s linear .5s 14, tsGreen .6s ease .5s both; }
-@keyframes tsSpicy { 50% { transform: translateX(-4%) rotate(-4deg) scale(1.04); } }
-@keyframes tsGreen { to { filter: drop-shadow(0 12px 14px rgba(0, 0, 0, .45)) hue-rotate(60deg) saturate(1.6) brightness(1.05); } }
-.tscene.bad-wasabi .ts-me::after { content: '💨'; position: absolute; right: -6%; top: 18%; font-size: 34px; opacity: 0; animation: tsPuff 1s ease-out 1s 2 both; }
-@keyframes tsPuff { 0% { opacity: 0; transform: translate(0, 0) scale(.6); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(30px, -30px) scale(1.3); } }
+function answer(c, btn) {
+  if (Q.answered === Q.i) return;
+  const ms = Math.round(performance.now() - Q.openAt);
+  Q.answered = Q.i; Q.choice = c;
+  btn.classList.add('mine');
+  $('abtns').classList.add('done');
+  buzz(40);
+  net.send({ t: 'ans', id: pid, q: Q.i, c, ms });
+  setTimeout(() => { if (view === 'answer') showLocked(c, `Answered in ${(ms / 1000).toFixed(1)}s`); }, 150);
+}
 
-/* picture-only phones: a little decoration per theme */
-[data-theme=christmas] .ts-deco { width: 3vw; max-width: 14px; aspect-ratio: 1; border-radius: 50%; background: #fff; box-shadow: 10vw 6vh 0 #fff, 32vw 14vh 0 1px #fff, 55vw 3vh 0 #fff, 74vw 18vh 0 2px #fff, 88vw 9vh 0 #fff, 20vw 30vh 0 #fff, 64vw 34vh 0 1px #fff; opacity: .9; top: -40vh; left: 2vw; animation: tsSnow 9s linear infinite; }
-[data-theme=christmas] .ts-deco.d2 { left: 6vw; animation-duration: 12s; animation-delay: -4s; opacity: .7; }
-[data-theme=christmas] .ts-deco.d3 { left: -4vw; animation-duration: 15s; animation-delay: -8s; opacity: .55; }
-@keyframes tsSnow { to { transform: translateY(140vh); } }
-[data-theme=midautumn] .ts-deco.d1 { right: 8vw; top: 6vh; width: 26vw; max-width: 160px; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 40% 38%, #fffbe8, #ffe39a 60%, #f3c15c); box-shadow: 0 0 60px 20px rgba(255, 225, 140, .45); }
-[data-theme=midautumn] .ts-deco.d2, [data-theme=midautumn] .ts-deco.d3 { width: 10vw; max-width: 60px; aspect-ratio: 3 / 4; border-radius: 45%; background: radial-gradient(ellipse at 50% 45%, #fff0a8 0 10%, #ff8a1f 45%, #b8121d 80%); box-shadow: 0 0 34px rgba(255, 170, 60, .7); left: 12vw; bottom: -10vh; animation: tsRiseL 14s linear infinite; }
-[data-theme=midautumn] .ts-deco.d3 { left: 70vw; animation-duration: 18s; animation-delay: -7s; }
-@keyframes tsRiseL { to { transform: translateY(-120vh) translateX(6vw); } }
-[data-theme=japan] .ts-deco { top: 4vh; width: 13vw; max-width: 74px; aspect-ratio: 3 / 4; border-radius: 40%; background: repeating-linear-gradient(180deg, #fff3e0 0 8%, #f5dfc0 8% 10%); box-shadow: 0 0 26px rgba(255, 210, 150, .7); transform-origin: 50% -20vh; animation: tsSway 3.4s ease-in-out infinite alternate; }
-[data-theme=japan] .ts-deco::before { content: ''; position: absolute; left: 50%; bottom: 100%; width: 2px; height: 20vh; background: rgba(60, 40, 20, .6); }
-[data-theme=japan] .ts-deco.d1 { left: 8vw; } [data-theme=japan] .ts-deco.d2 { right: 8vw; animation-delay: -1.2s; background: repeating-linear-gradient(180deg, #ff6b5a 0 8%, #e64a3c 8% 10%); } [data-theme=japan] .ts-deco.d3 { left: 44vw; top: -3vh; animation-delay: -2.2s; }
+// ---------------- result ----------------
+// res = [ok(1/0/-1), gain, total, rank, streak, ptsBehind, nameAhead]
+function showResult(res, q) {
+  lastResultQ = q;
+  cancelAnimationFrame(Q.timerRAF);
+  if (!res) { show('wait'); return; }
+  const [ok, gain, total, rank, streak, behind, ahead] = res;
+  setScore(total, gain);
+  setRank(rank);
+  const good = ok === 1;
+  const v = $('verdict');
+  v.className = 'verdict ' + (good ? 'good' : 'bad');
+  v.textContent = good ? THEME.copy.correct : ok === -1 ? THEME.copy.timeout : THEME.copy.wrong;
+  $('gain').textContent = good ? `+${gain} pts` : '+0 pts';
+  $('streak').textContent = good && streak > 1 ? `🔥 ${streak} in a row!` : '';
+  $('rank').textContent = ordinal(rank);
+  $('behind').textContent = rank === 1 ? (isLegacy() ? "You're leading the coven! 👑" : "You're in the lead! 👑") : behind === 0 ? `Tied with ${ahead}` : `${behind.toLocaleString('en-US')} pts behind ${ahead}`;
+  const ca = $('correct-ans');
+  if (Q.correct != null && Q.opts && Q.opts[Q.correct] != null) {
+    const st = ANSWER_STYLES[Q.correct];
+    ca.innerHTML = `Correct answer: <span class="shape">${SHAPES[st.shape]}</span><b></b>`;
+    ca.querySelector('b').textContent = Q.opts[Q.correct];
+    ca.querySelector('svg *').setAttribute('fill', st.color);
+    ca.classList.remove('hidden');
+  } else ca.classList.add('hidden');
+  // let the scene play first, then slide the score panel in
+  const panel = document.querySelector('.res-panel');
+  panel.classList.remove('late'); void panel.offsetWidth;
+  if (use3D() || !isLegacy()) panel.classList.add('late');
+  show('result');
+  // MY own result decides MY animation (not the room majority)
+  if (!isLegacy()) {
+    if (good) { tsPlay('result', 'res-good', THEME.copy.goodLine, 700); fxPlay(THEME.fx.good); if (hub3D()) H3.stage.gagBlocked(); }
+    else { tsPlay('result', `res-bad bad-${THEME.fx.bad}`, ok === -1 ? 'Too slow… ⏰' : THEME.copy.badLine, 1200, true); fxPlay(THEME.fx.bad); if (hub3D()) H3.stage.gagRetaliate(); }
+  } else if (use3D()) {
+    atStation(q);
+    if (good) S3.stage.gagBlocked(q, q % 2, FX3);
+    else S3.stage.gagRetaliate(q, FX3);
+  } else if (good) playStage('result', (q % 2 ? 'res-vortex' : 'res-shield') + ' tint-good', 'Phew! A mysterious force saved me ✨', 1300);
+  else playStage('result', 'res-scare tint-bad', ok === -1 ? 'Too slow… 😵' : 'Ouch… 😵‍💫', 1900);
+  document.body.classList.toggle('good', good);
+  document.body.classList.toggle('bad', !good);
+  buzz(good ? [30, 40, 30] : [120]);
+}
+
+function showFinal(m) {
+  const r = m.res && m.res[pid];
+  if (r) { setScore(r[2]); setRank(r[3]); }
+  const rank = r ? r[3] : null;
+  $('f-medal').textContent = rank === 1 ? '🏆' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : (isLegacy() ? '🎃' : '🎉');
+  $('f-title').textContent = rank ? `You finished ${ordinal(rank)}!` : 'Game over!';
+  $('f-score').textContent = r ? `${r[2].toLocaleString('en-US')} pts` : '';
+  const top = $('f-top');
+  top.innerHTML = '';
+  (m.top || []).forEach(([name, av, score], i) => {
+    const row = el('div', 'r');
+    const b = el('b'); b.textContent = `${['🥇', '🥈', '🥉'][i]} ${name}`;
+    const s = el('i'); s.textContent = score.toLocaleString('en-US');
+    row.append(avatarEl(av), b, s);
+    top.appendChild(row);
+  });
+  show('final');
+  if (!isLegacy() && rank && rank <= 3) setTimeout(() => fxPlay(THEME.fx.final || 'burst'), 300);
+  buzz([40, 60, 40, 60, 120]);
+}
+
+// ---------------- boot ----------------
+booted = true;
+buildJoin();
+if (!isLegacy()) initHub3D(); // loads while the player types their name
+$('btn-leave').onclick = () => {
+  if (!confirm('Leave the game? Your score will be lost.')) return;
+  if (net) net.send({ t: 'leave', id: pid });
+  joined = false;
+  document.body.classList.remove('joined');
+  sess.del('hq-joined');
+  me.score = 0; setScore(0); setRank(0); Q.answered = -1; lastResultQ = -1;
+  show('join');
+};
+$('btn-rejoin').onclick = () => { sess.del('hq-joined'); sess.del('hq-pid'); location.reload(); };
+if (room && sess.get('hq-joined') === room && me.name) {
+  // quick rejoin after a refresh (if the game is gone, back to the PIN screen)
+  connect();
+  enterGame();
+  const wait = waitForHost(JOIN_TIMEOUT + 3000);
+  sendJoin();
+  wait.then((ok) => {
+    if (ok) return;
+    joined = false; document.body.classList.remove('joined'); sess.del('hq-joined');
+    disconnect();
+    show('join');
+    joinError(`Game ${room} is not running anymore. Enter the PIN on the big screen.`);
+  });
+} else {
+  show('join');
+  if (/^\d{6}$/.test(room)) connect(); // shows the quiz's title + theme before joining
+}
+window.__player = { pid, me, Q, S3, H3, onHostMsg };
