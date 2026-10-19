@@ -11,7 +11,7 @@ export const CONFIG = {
 
   // ---- Game timing (seconds) ----
   QUESTION_TIME: 20,       // time to answer each question
-  QUESTION_PREVIEW: 3,     // question card shown alone before the answers open
+  QUESTION_PREVIEW: 2,     // question card shown alone before the answers open
   MAX_POINTS: 1000,        // a perfect (instant) correct answer
   AUTO_ADVANCE: false,     // true = move on automatically after the scoreboard
   AUTO_ADVANCE_DELAY: 8,
