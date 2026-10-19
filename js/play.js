@@ -531,8 +531,15 @@ function showPre(m) {
   show('pre');
   atStation(m.i);
   playStage('pre');
-  const pv = m.pv || CONFIG.QUESTION_PREVIEW;
+  // manual host: no countdown — the answers come when the host presses "Show answers"
+  const manual = !!m.man;
   const bar = $('pre-bar');
+  bar.parentElement.classList.toggle('hidden', manual);
+  document.querySelector('#v-pre .hint-line').textContent = manual
+    ? 'Read the question — the host will show the answers soon…'
+    : 'Read the question — the answers appear in a moment…';
+  if (manual) return;
+  const pv = m.pv || CONFIG.QUESTION_PREVIEW;
   bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)'; void bar.offsetWidth;
   bar.style.transition = `transform ${pv}s linear`; bar.style.transform = 'scaleX(0)';
 }
