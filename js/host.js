@@ -694,7 +694,7 @@ function setGameButtons(on) {
 }
 
 // ---- auto-play: the scoreboard and the next question come by themselves (the host can still press Next)
-const AUTO = { on: (() => { try { return localStorage.getItem('bos-autoplay') !== '0'; } catch (e) { return true; } })(), REVEAL: 7, BOARD: 8 };
+const AUTO = { on: (() => { try { return localStorage.getItem('bos-autoplay') !== '0'; } catch (e) { return true; } })(), REVEAL: 3, BOARD: 4 };
 let autoT = 0, autoI = 0;
 function paintAuto() {
   $('btn-auto').classList.toggle('on', AUTO.on);
