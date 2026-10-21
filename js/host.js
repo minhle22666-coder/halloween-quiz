@@ -137,6 +137,7 @@ function heartbeat() {
     if (S.phase === 'open') msg.rem = Math.max(0, qDur() * 1000 - (performance.now() - S.openedAt));
   }
   if (S.phase === 'reveal' || S.phase === 'board' || S.phase === 'final') msg.res = resultsPayload();
+  if (S.phase === 'final') msg.all = finalList();
   if ((S.phase === 'reveal' || S.phase === 'board') && QUIZ[S.qi]) { msg.qd = qPayload(); msg.cor = QUIZ[S.qi].answer; }
   send(msg);
   hbTimer = setTimeout(heartbeat, 3000);
@@ -154,6 +155,8 @@ function qPayload() {
 function ranked() {
   return [...S.players.values()].sort((a, b) => b.score - a.score || a.joinedAt - b.joinedAt);
 }
+/** everyone, best first: [id, name, avatar, score] (phones show the podium + the full list) */
+const finalList = () => ranked().map((p) => [p.id, p.name, p.avatar, p.score]);
 function resultsPayload() {
   const res = {};
   const list = ranked();
@@ -647,7 +650,7 @@ async function showFinal() {
     r.querySelector('span').textContent = p.name;
     rest.appendChild(r);
   });
-  send({ t: 'final', res: resultsPayload(), top: list.slice(0, 3).map((p) => [p.name, p.avatar, p.score]), total: QUIZ.length });
+  send({ t: 'final', res: resultsPayload(), top: list.slice(0, 3).map((p) => [p.name, p.avatar, p.score]), all: finalList(), total: QUIZ.length });
   scheduleHeartbeat(3000);
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   sfx.drumroll(1.6); await wait(1700); nodes[2].classList.add('show'); sfx.pop();

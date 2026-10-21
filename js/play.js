@@ -323,6 +323,7 @@ function onHostMsg(m) {
 }
 
 function resetMe() {
+  finalShown = false;
   me.score = 0; setScore(0); setRank(0);
   lastResultQ = -1; Q.answered = -1; Q.i = -1;
   if (use3D()) { S3.stage.resetHall(); S3.station = -1; }
@@ -347,7 +348,7 @@ function onHeartbeat(m) {
   else if (m.ph === 'pre' && m.qd && (view !== 'pre' || Q.i !== m.qd.i)) showPre({ ...m.qd, total: m.total });
   else if (m.ph === 'open' && m.qd && Q.answered !== m.qd.i && (view !== 'answer' || Q.i !== m.qd.i)) openAnswer({ ...m.qd, total: m.total }, m.rem);
   else if ((m.ph === 'reveal' || m.ph === 'board') && m.res && lastResultQ !== m.q) { if (m.qd) { Q.text = m.qd.text; Q.opts = m.qd.opts; } if (m.cor != null) Q.correct = m.cor; showResult(m.res[pid], m.q); }
-  else if (m.ph === 'final' && view !== 'final' && m.res) showFinal({ res: m.res, top: null });
+  else if (m.ph === 'final' && m.res && (view !== 'final' || (m.all && !$('f-list').children.length))) showFinal({ res: m.res, top: null, all: m.all }, true);
 }
 
 // ---------------- 2D fallback scene (phones without WebGL) ----------------
@@ -531,17 +532,10 @@ function showPre(m) {
   show('pre');
   atStation(m.i);
   playStage('pre');
-  // manual host: no countdown — the answers come when the host presses "Show answers"
-  const manual = !!m.man;
+  const pv = m.pv == null ? CONFIG.QUESTION_PREVIEW : m.pv;
   const bar = $('pre-bar');
-  bar.parentElement.classList.toggle('hidden', manual);
-  document.querySelector('#v-pre .hint-line').textContent = manual
-    ? 'Read the question — the host will show the answers soon…'
-    : 'Read the question — the answers appear in a moment…';
-  if (manual) return;
-  const pv = m.pv || CONFIG.QUESTION_PREVIEW;
   bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)'; void bar.offsetWidth;
-  bar.style.transition = `transform ${pv}s linear`; bar.style.transform = 'scaleX(0)';
+  if (pv > 0) { bar.style.transition = `transform ${pv}s linear`; bar.style.transform = 'scaleX(0)'; }
 }
 
 function showLocked(choice, note) {
@@ -666,24 +660,71 @@ function showResult(res, q) {
   buzz(good ? [30, 40, 30] : [120]);
 }
 
-function showFinal(m) {
+let finalShown = false;
+/** last screen: my place, the top-3 podium (revealed 3rd → 2nd → 1st like the big screen) and everyone's score */
+function showFinal(m, instant = false) {
   const r = m.res && m.res[pid];
   if (r) { setScore(r[2]); setRank(r[3]); }
   const rank = r ? r[3] : null;
-  $('f-medal').textContent = rank === 1 ? '🏆' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : (isLegacy() ? '🎃' : '🎉');
-  $('f-title').textContent = rank ? `You finished ${ordinal(rank)}!` : 'Game over!';
-  $('f-score').textContent = r ? `${r[2].toLocaleString('en-US')} pts` : '';
-  const top = $('f-top');
-  top.innerHTML = '';
-  (m.top || []).forEach(([name, av, score], i) => {
-    const row = el('div', 'r');
-    const b = el('b'); b.textContent = `${['🥇', '🥈', '🥉'][i]} ${name}`;
-    const s = el('i'); s.textContent = score.toLocaleString('en-US');
-    row.append(avatarEl(av), b, s);
-    top.appendChild(row);
+  const all = m.all || (m.top || []).map(([name, av, score], i) => ['top' + i, name, av, score]);
+  if (finalShown && view === 'final' && !instant) return;
+  const reveal = !instant && !finalShown;
+  finalShown = true;
+  if (fx) fx.clear();   // no rain cloud left over from the last question
+  // me — while the podium is being revealed the place stays a surprise
+  const paintMe = () => {
+    $('f-medal').textContent = rank === 1 ? '🏆' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : (isLegacy() ? '🎃' : '🎉');
+    $('f-title').textContent = rank ? `You finished ${ordinal(rank)}!` : 'Game over!';
+    $('f-score').textContent = r ? `${r[2].toLocaleString('en-US')} pts` : '';
+    $('f-medal').classList.remove('roll'); void $('f-medal').offsetWidth; $('f-medal').classList.add('pop');
+  };
+  clearTimeout(showFinal._t);
+  if (reveal) {
+    $('f-medal').textContent = '🥁'; $('f-medal').classList.add('roll');
+    $('f-title').textContent = 'And the winners are…';
+    $('f-score').textContent = 'Look at the big screen 👀';
+    showFinal._t = setTimeout(paintMe, 6600);
+  } else paintMe();
+  // podium: 2nd · 1st · 3rd
+  const pod = $('f-podium');
+  pod.innerHTML = '';
+  [1, 0, 2].forEach((i) => {
+    const p = all[i];
+    const col = el('div', `pd pd${i + 1}` + (p ? '' : ' empty') + (p && p[0] === pid ? ' me' : ''));
+    if (p) {
+      const who = el('div', 'pd-who');
+      if (i === 0) who.appendChild(el('span', 'crown')).textContent = '👑';
+      who.appendChild(avatarEl(p[2]));
+      const nm = el('b', 'pd-nm'); nm.textContent = p[1];
+      const sc = el('i', 'pd-sc'); sc.textContent = p[3].toLocaleString('en-US');
+      col.append(who, nm, sc);
+    }
+    const step = el('div', 'pd-step'); step.textContent = i + 1;
+    col.appendChild(step);
+    col.style.setProperty('--d', reveal ? [6.2, 3.6, 1.7][i] + 's' : '0s');
+    pod.appendChild(col);
   });
+  // everyone
+  const list = $('f-list');
+  list.innerHTML = '';
+  $('f-count').textContent = `${all.length} player${all.length === 1 ? '' : 's'}`;
+  let mine = null;
+  all.forEach((p, i) => {
+    const row = el('div', 'fr' + (i < 3 ? ' top' + (i + 1) : '') + (p[0] === pid ? ' me' : ''));
+    const rk = el('span', 'fr-rk'); rk.textContent = i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1;
+    const nm = el('b'); nm.textContent = p[1] + (p[0] === pid ? ' (you)' : '');
+    const sc = el('i'); sc.textContent = p[3].toLocaleString('en-US');
+    row.append(rk, avatarEl(p[2]), nm, sc);
+    list.appendChild(row);
+    if (p[0] === pid) mine = row;
+  });
+  const v = $('v-final');
+  v.classList.toggle('reveal', reveal);
+  v.classList.toggle('instant', !reveal);
   show('final');
-  if (!isLegacy() && rank && rank <= 3) setTimeout(() => fxPlay(THEME.fx.final || 'burst'), 300);
+  window.scrollTo(0, 0);
+  if (mine && all.indexOf(all.find((p) => p[0] === pid)) > 6) setTimeout(() => mine.scrollIntoView({ block: 'center', behavior: 'smooth' }), reveal ? 7600 : 300);
+  if (!isLegacy() && rank && rank <= 3) setTimeout(() => fxPlay(THEME.fx.final || 'burst'), reveal ? 6400 : 300);
   buzz([40, 60, 40, 60, 120]);
 }
 
