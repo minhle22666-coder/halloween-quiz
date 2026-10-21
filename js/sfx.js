@@ -1,4 +1,4 @@
-// Tiny WebAudio sound kit (no files except the evil laugh).
+// Tiny WebAudio sound kit: synth beeps + a few short recorded clips (assets/audio).
 let ctx = null;
 let master = null;
 let laughBuf = null;
@@ -15,6 +15,7 @@ export function audioUnlock() {
       .then((b) => ctx.decodeAudioData(b))
       .then((buf) => { laughBuf = buf; })
       .catch(() => {});
+    loadSamples();
   }
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
@@ -164,3 +165,31 @@ export const bell = () => { [0, 0.55].forEach((at) => { tone(392, 1.6, { vol: 0.
 export const buzz = () => { for (let i = 0; i < 6; i++) tone(110 + Math.random() * 30, 0.06, { type: 'sawtooth', vol: 0.07, at: i * 0.09 + Math.random() * 0.04 }); };
 export const zap = () => { tone(1800, 0.35, { type: 'sawtooth', vol: 0.1, glide: 300 }); tone(600, 0.5, { type: 'sine', vol: 0.15, glide: 1800 }); };
 export const bonk = () => { tone(520, 0.18, { type: 'triangle', vol: 0.35, glide: 180 }); };
+
+// ---- recorded clips (Halloween ghost scenes) — the synth sound plays if a clip isn't loaded yet ----
+const SAMPLE_FILES = { boo: 'assets/audio/boo.mp3', magic: 'assets/audio/magic.mp3', yay: 'assets/audio/yay.mp3', door: 'assets/audio/door.mp3' };
+const samples = {};
+function loadSamples() {
+  for (const [k, src] of Object.entries(SAMPLE_FILES)) {
+    fetch(src).then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).then((buf) => { samples[k] = buf; }).catch(() => {});
+  }
+}
+function clip(name, vol = 1, fallback) {
+  if (!ctx) return;
+  const buf = samples[name];
+  if (!buf) { if (fallback) fallback(); return; }
+  const s = ctx.createBufferSource();
+  s.buffer = buf;
+  const g = ctx.createGain();
+  g.gain.value = vol;
+  s.connect(g).connect(master);
+  s.start();
+}
+/** the ghost scares the mascot (wrong answer) */
+export const booLaugh = () => clip('boo', 1, boo);
+/** the magic vortex swallows the ghost */
+export const magicSpell = () => clip('magic', 0.8, zap);
+/** the mascot jumps for joy */
+export const yay = () => clip('yay', 0.9, sparkle);
+/** a door shuts on the ghost */
+export const doorShut = () => clip('door', 1, slam);

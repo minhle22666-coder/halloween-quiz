@@ -901,7 +901,7 @@ export class Stage {
       if (sp.type !== 'door') this.setGhostOpacity(1 - k);
     }, 'in');
     if (sp.type === 'door') {
-      sfx.slam && sfx.slam(); this.shake = 0.12;
+      (sfx.doorShut || sfx.slam || (() => {}))(); this.shake = 0.12;
       G.visible = false;
       await this.tween(0.15, (k) => { sp.ref.pivot.rotation.y = 1.4 * (1 - k); }, 'in');
     }
@@ -969,7 +969,7 @@ export class Stage {
       Vx.visible = true;
       Vx.position.copy(G.position.clone().lerp(sp.pos, 0.6));
       Vx.lookAt(this.camera.position.clone().sub(HALL_ORIGIN));
-      sfx.zap && sfx.zap();
+      (sfx.magic || sfx.zap || (() => {}))();
       this.say('W-what?! Let me go!', this.wpos(G, V(0, 0.55 * this._gk(), 0)), 1.2, 'shout');
       const b = G.position.clone();
       await this.tween(1.1, (k, raw) => {
@@ -982,12 +982,12 @@ export class Stage {
         G.position.x += (Math.random() - 0.5) * 0.04 * (1 - pull);
       }, 'linear');
       G.visible = false; Vx.visible = false;
-      sfx.slam && sfx.slam();
-      if (sp.type === 'door') await this.tween(0.12, (k) => { sp.ref.pivot.rotation.y = 1.4 * (1 - k); });
+      if (sp.type === 'door') { (sfx.doorShut || sfx.slam || (() => {}))(); await this.tween(0.12, (k) => { sp.ref.pivot.rotation.y = 1.4 * (1 - k); }); }
     }
     if (my !== this.seq) return;
     // relief!
     sfx.sparkle && sfx.sparkle();
+    sfx.yay && sfx.yay();
     this._burstSparkles(M.pos);
     this.mascotSay('Phew! Correct! ✨', 2, 'good');
     M.shiver = 0;

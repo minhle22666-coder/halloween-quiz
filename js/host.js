@@ -271,7 +271,8 @@ function setNext(label, visible = true) { nextBtn.querySelector('.lbl').textCont
 // ============================================================ flow
 const FX = {
   whoosh: sfx.whoosh, creak: sfx.doorCreak, knock: sfx.knock, bell: sfx.bell, buzz: sfx.buzz, slam: sfx.slam,
-  zap: sfx.zap, bonk: sfx.bonk, boo: sfx.boo, wrong: sfx.wrong, thud: sfx.thud, sparkle: sfx.sparkle,
+  zap: sfx.zap, bonk: sfx.bonk, boo: sfx.booLaugh, wrong: sfx.wrong, thud: sfx.thud, sparkle: sfx.sparkle,
+  magic: sfx.magicSpell, yay: sfx.yay, doorShut: sfx.doorShut,
 };
 
 async function refreshQuiz() {
