@@ -128,7 +128,7 @@ export const MUSIC = {
   sundays: { name: '64 Sundays', by: 'Twin Musicom', src: 'assets/music/sundays.mp3', vol: 0.42 },
   deckhalls: { name: 'Deck the Halls', by: 'Alex-Productions', src: 'assets/music/deckhalls.mp3', vol: 0.3 },
   silly: { name: 'Silly Intro', by: 'Alexander Nakarada', src: 'assets/music/silly.mp3', vol: 0.5 },
-  halloween: { name: 'Haunted castle (Halloween)', by: '3 tracks', set: { lobby: 'assets/music/waiting.mp3', game: 'assets/music/ingame.mp3', winner: 'assets/music/winner.mp3' }, vol: 0.45 },
+  halloween: { name: 'Haunted castle (Halloween)', by: '3 tracks', set: { lobby: 'assets/music/waiting.mp3', game: 'assets/music/halloween-game.mp3', winner: 'assets/music/winner.mp3' }, vol: 0.45 },
   none: { name: 'No music', by: '' },
 };
 export const MUSIC_ORDER = ['picnic', 'sundays', 'deckhalls', 'silly', 'halloween', 'none'];
