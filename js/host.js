@@ -77,7 +77,7 @@ function restore() {
 // seconds to answer the current question (set per question in the editor, default 20)
 const qDur = (i = S.qi) => (QUIZ[i] && QUIZ[i].time) || CONFIG.QUESTION_TIME;
 // reading time before the answers open (+2 s when there is a picture/video to look at)
-const qPreview = (i = S.qi) => CONFIG.QUESTION_PREVIEW + (QUIZ[i] && QUIZ[i].media ? 2 : 0);
+const qPreview = (i = S.qi) => (AUTO.PREVIEW || CONFIG.QUESTION_PREVIEW) + (QUIZ[i] && QUIZ[i].media ? 2 : 0);
 
 // theme info sent to the phones: [theme, palette, title, subtitle]
 const themeTag = () => [THEME.id, PAL.id, (quizDoc && quizDoc.title) || 'BOS Quiz', (quizDoc && quizDoc.subtitle) || '', greetingOf(quizDoc)];
@@ -145,9 +145,8 @@ function scheduleHeartbeat(ms) { clearTimeout(hbTimer); hbTimer = setTimeout(hea
 
 function qPayload() {
   const q = QUIZ[S.qi];
-  const d = { i: S.qi, text: q.text, opts: q.options, dur: qDur(), pv: qPreview() };
+  const d = { i: S.qi, text: q.text, opts: q.options, dur: qDur(), pv: AUTO.on ? qPreview() : 0 };
   if (q.media) d.media = q.media;
-  if (!AUTO.on) d.man = 1;   // manual: phones wait for the host instead of counting down
   return d;
 }
 
@@ -243,10 +242,10 @@ function frameStage(dur = 0.6) {
   let f = 0;
   const ph = S.phase;
   if (ph === 'pre' || ph === 'open' || ph === 'reveal') {
-    const top = document.querySelector('.q-head').getBoundingClientRect().bottom;
+    const top = (ph === 'reveal' ? $('result-banner') : document.querySelector('.q-head')).getBoundingClientRect().bottom;
     let bottom = h;
     if (ph === 'open') bottom = $('tiles').getBoundingClientRect().top;
-    if (ph === 'reveal') bottom = $('result-banner').getBoundingClientRect().top;
+    if (ph === 'reveal') bottom = $('tiles').getBoundingClientRect().top;
     if (ph === 'pre') bottom = h * 0.9;
     const at = stage.mascotScreenY ? stage.mascotScreenY() : 0.5;   // where the mascot would be without framing
     S.focusY = (top + bottom) / 2 / h;                                // …and where it will be: effects aim there
@@ -260,13 +259,14 @@ function frameStage(dur = 0.6) {
   }
   stage.setFrame(Math.max(-0.32, Math.min(0.2, f)), dur, x);
 }
-addEventListener('resize', () => frameStage(0));
-const nextBtn = $('btn-next');
-function setNext(label, visible = true, attn = false) {
-  nextBtn.querySelector('.lbl').textContent = label;
-  nextBtn.classList.toggle('hidden', !visible);
-  nextBtn.classList.toggle('attn', attn);
+/** the "x% got BOO'd" banner sits right under the question, so the mascot and its scene stay free */
+function placeBanner() {
+  const qh = document.querySelector('.q-head').getBoundingClientRect();
+  $('result-banner').style.top = Math.round(qh.bottom + Math.max(10, innerHeight * 0.015)) + 'px';
 }
+addEventListener('resize', () => { if (S.phase === 'reveal') placeBanner(); frameStage(0); });
+const nextBtn = $('btn-next');
+function setNext(label, visible = true) { nextBtn.querySelector('.lbl').textContent = label; nextBtn.classList.toggle('hidden', !visible); }
 
 // ============================================================ flow
 const FX = {
@@ -350,7 +350,7 @@ async function nextQuestion() {
   if (fx) fx.clear();
   const my = S.qi, run = S.run;
   const scr = $('scr-question');
-  scr.classList.remove('reveal', 'pre', 'manual'); scr.classList.add('walk');
+  scr.classList.remove('reveal', 'pre'); scr.classList.add('walk');
   $('walk-num').textContent = `Question ${S.qi + 1} of ${QUIZ.length}`;
   paintQNum();
   $('tiles').innerHTML = '';
@@ -386,8 +386,6 @@ function updateMascot() {
 }
 
 // 2) the question card appears
-//    auto-play: the answers open after a short read · manual: the host presses "Show answers"
-let preT = 0;
 function showPre() {
   S.phase = 'pre';
   const q = QUIZ[S.qi];
@@ -406,37 +404,29 @@ function showPre() {
   sfx.gong();
   send({ t: 'pre', ...qPayload(), total: QUIZ.length });
   scheduleHeartbeat(500);
+  const my = S.qi, run = S.run;
   frameStage();
-  if (AUTO.on) startPreCountdown(); else holdPre();
+  paintPreBar();
+  if (AUTO.on) setTimeout(() => { if (AUTO.on && S.phase === 'pre' && S.qi === my && S.run === run) openQuestion(); }, qPreview() * 1000);
 }
-// auto-play: reading bar → the answers open by themselves
-function startPreCountdown() {
-  clearTimeout(preT);
-  $('scr-question').classList.remove('manual');
-  setNext('Show answers ▶');
-  const pv = qPreview();
+
+/** the reading bar: counts down in auto-play, stays full while the host decides */
+function paintPreBar() {
   const bar = $('pre-bar');
   bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)';
   void bar.offsetWidth;
-  bar.style.transition = `transform ${pv}s linear`;
+  if (!AUTO.on) { setNext('Choose your answer \u25B6'); return; }
+  setNext('Skip \u23ED');
+  bar.style.transition = `transform ${qPreview()}s linear`;
   bar.style.transform = 'scaleX(0)';
-  const my = S.qi, run = S.run;
-  preT = setTimeout(() => { if (S.phase === 'pre' && S.qi === my && S.run === run) openQuestion(); }, pv * 1000);
-}
-// manual: the question stays on screen until the host opens the answers
-function holdPre() {
-  clearTimeout(preT);
-  $('scr-question').classList.add('manual');
-  setNext('Show answers ▶', true, true);
 }
 
 function openQuestion() {
   const q = QUIZ[S.qi];
   S.phase = 'open';
-  clearTimeout(preT);
+  setNext('Skip \u23ED');
   const scr = $('scr-question');
-  scr.classList.remove('pre', 'manual');
-  setNext('Skip ⏭');
+  scr.classList.remove('pre');
   const tiles = $('tiles');
   tiles.innerHTML = '';
   tiles.style.setProperty('--n', q.options.length);
@@ -526,6 +516,7 @@ function closeQuestion() {
   banner.classList.toggle('good', good);
   banner.classList.toggle('bad', !good);
   banner.style.color = '';
+  placeBanner();
   frameStage(0.5);
   send({ t: 'reveal', q: S.qi, correct: q.answer, res: resultsPayload(), total: QUIZ.length });
   scheduleHeartbeat(3000);
@@ -675,7 +666,6 @@ function resetScores() {
 function stopEverything() {
   S.run++;
   stopAuto();
-  clearTimeout(preT);
   cancelAnimationFrame(timerRAF);
   stopBots();
   stage.resetActors();
@@ -716,24 +706,23 @@ function setGameButtons(on) {
   $('btn-auto').classList.toggle('hidden', !on);
 }
 
-// ---- auto-play: always starts OFF (manual) — the host opens the answers and presses Next
-const AUTO = { on: false, REVEAL: 3, BOARD: 4 };
+// ---- auto-play: the scoreboard and the next question come by themselves (the host can still press Next)
+const AUTO = { on: (() => { try { return localStorage.getItem('bos-autoplay') !== '0'; } catch (e) { return true; } })(), PREVIEW: 5, REVEAL: 7, BOARD: 8 };
 let autoT = 0, autoI = 0;
 function paintAuto() {
   $('btn-auto').classList.toggle('on', AUTO.on);
   $('btn-auto').querySelector('span').textContent = AUTO.on ? 'Auto-play' : 'Manual';
   $('btn-auto').title = AUTO.on ? 'Auto-play is ON — click to wait for you instead (A)' : 'Manual — click to let the game move on by itself (A)';
   $('lobby-auto').checked = AUTO.on;
-  $('lobby-auto-sub').textContent = AUTO.on ? 'the game runs by itself' : 'you show the answers & press Next';
+  $('lobby-auto-sub').textContent = AUTO.on ? 'the game runs by itself' : 'you press Next each time';
 }
 function setAuto(on) {
   AUTO.on = !!on;
+  try { localStorage.setItem('bos-autoplay', AUTO.on ? '1' : '0'); } catch (e) { /* */ }
   paintAuto();
   if (!AUTO.on) stopAuto();
-  if (S.phase === 'pre') {
-    if (AUTO.on) startPreCountdown(); else holdPre();
-    send({ t: 'pre', ...qPayload(), total: QUIZ.length });   // phones: countdown bar on / off
-  } else if (AUTO.on && S.phase === 'reveal') autoAdvance(AUTO.REVEAL);
+  if (S.phase === 'pre') { const my = S.qi, run = S.run; paintPreBar(); send({ t: 'pre', ...qPayload(), total: QUIZ.length }); if (AUTO.on) setTimeout(() => { if (AUTO.on && S.phase === 'pre' && S.qi === my && S.run === run) openQuestion(); }, qPreview() * 1000); }
+  else if (AUTO.on && S.phase === 'reveal') autoAdvance(AUTO.REVEAL);
   else if (AUTO.on && S.phase === 'board') autoAdvance(AUTO.BOARD);
 }
 function stopAuto() {
