@@ -70,4 +70,5 @@ export const QUESTIONS = [
 export const AVATARS = [
   'witch', 'ghost', 'vampire', 'magician', 'pirate', 'ninja', 'viking',
   'detective', 'astronaut', 'artist', 'chef', 'dj', 'gentleman', 'baby',
+  'cupid', 'reindeer', 'angel', 'sleepy',
 ].map((id) => ({ id, src: `assets/avatars/${id}.webp` }));
