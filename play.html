@@ -131,11 +131,17 @@
   </main>
 
   <!-- FINAL -->
-  <main id="v-final" class="view hidden center final">
-    <div class="medal" id="f-medal">🏆</div>
-    <h2 id="f-title">You finished</h2>
-    <div class="f-score" id="f-score"></div>
-    <div class="f-top" id="f-top"></div>
+  <main id="v-final" class="view hidden final">
+    <div class="f-me">
+      <div class="medal" id="f-medal">🏆</div>
+      <div class="f-me-txt"><h2 id="f-title">You finished</h2><div class="f-score" id="f-score"></div></div>
+    </div>
+    <div class="f-podium" id="f-podium"></div>
+    <section class="f-board">
+      <header><b>Final ranking</b><span id="f-count"></span></header>
+      <div class="f-list" id="f-list"></div>
+    </section>
+    <div class="f-top hidden" id="f-top"></div>
   </main>
 
   <!-- KICKED -->
