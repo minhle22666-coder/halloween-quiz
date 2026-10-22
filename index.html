@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BOS Quiz</title>
   <link rel="icon" href="assets/img/mascot-head.png">
-  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/common.css?v=19">
   <link rel="stylesheet" href="css/fonts-admin.css">
-  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/admin.css?v=19">
   <script src="lib/supabase.js"></script>
   <script type="importmap">{ "imports": { "three": "./lib/three/three.module.js", "three/addons/": "./lib/three/addons/" } }</script>
 </head>
@@ -30,12 +30,12 @@
     <i class="gs dot" style="left:83.1%;--s:23px;--t:29.4s;--d:-4.7s;--r:21deg;--o:0.19;--b:0px"></i>
     <i class="gs dia" style="left:88.5%;--s:28px;--t:33.8s;--d:-34.9s;--r:29deg;--o:0.15;--b:0px"></i>
     <i class="gs sq" style="left:97.3%;--s:47px;--t:42.4s;--d:-34.6s;--r:100deg;--o:0.15;--b:0px"></i>
-    <img class="bos-wm" src="assets/img/bos-logo.webp" alt="">
+    <img class="bos-wm" src="assets/img/bos-logo.webp?v=3" alt="">
   </div>
   <!-- ============ LIBRARY ============ -->
   <section id="v-lib" class="hidden">
     <header class="adm-top lib-top">
-      <a class="brand" href="#"><img class="brand-logo" src="assets/img/bos-quiz-logo.webp" alt="BOS Quiz"><span class="brand-name"><small>Admin</small></span></a>
+      <a class="brand" href="#"><img class="brand-logo" src="assets/img/bos-quiz-logo.webp?v=3" alt="BOS Quiz"><span class="brand-name"><small>Admin</small></span></a>
       <div class="sp"></div>
       <button class="link out" id="btn-logout" title="Log out of admin"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span>Log out</span></button>
     </header>
@@ -47,7 +47,7 @@
           <p class="hero-sub"><span id="lib-count">Loading…</span> · pick one to play on the big screen, or make a new one</p>
           <button class="btn hero-btn" id="btn-new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create quiz</button>
         </div>
-        <div class="hero-art" aria-hidden="true"><i class="o1"></i><img src="assets/img/mascot-buzzer.webp" alt=""></div>
+        <div class="hero-art" aria-hidden="true"><i class="o1"></i><img src="assets/img/mascot-buzzer.webp?v=3" alt="" onerror="if(!this.dataset.f){this.dataset.f=1;this.src='assets/img/mascot-quiz.webp?v=3'}"></div>
       </section>
       <div class="lib-bar">
         <label class="lib-find"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="lib-search" type="search" placeholder="Search quizzes…" autocomplete="off"></label>
