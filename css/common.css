@@ -246,3 +246,10 @@ button { font-family: inherit; cursor: pointer; }
 .gate-card input[type=password] { letter-spacing: 6px; }
 .gate-card { width: min(400px, calc(100vw - 40px)); }
 .pw input { width: 100%; }
+
+/* gate: the art / form wrappers only matter on the light admin page */
+.gate-art, .gate-main { display: contents; }
+.gate-tag, .gate-label, .gate-hi, .gate-bg { display: none; }
+/* the 3D "BOS QUIZ" wordmark replaces the text title on every gate */
+.gate-logo { display: block; width: min(380px, 92%); height: auto; margin: 4px auto 0; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .35)); }
+.gate-card h1 { display: none; }
