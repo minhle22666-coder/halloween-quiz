@@ -4,32 +4,58 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BOS Quiz</title>
-  <link rel="icon" href="assets/avatars/chef.webp">
+  <link rel="icon" href="assets/img/mascot-head.png">
   <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/fonts-admin.css">
   <link rel="stylesheet" href="css/admin.css">
   <script src="lib/supabase.js"></script>
   <script type="importmap">{ "imports": { "three": "./lib/three/three.module.js", "three/addons/": "./lib/three/addons/" } }</script>
 </head>
 <body class="adm">
+  <!-- playful background: drifting answer shapes + the BOS team mark, greyed out -->
+  <div class="adm-bg" aria-hidden="true">
+    <i class="gs tri" style="left:0.6%;--s:37px;--t:39.0s;--d:-2.9s;--r:193deg;--o:0.14;--b:0px"></i>
+    <i class="gs dot" style="left:8.3%;--s:25px;--t:26.7s;--d:-17.3s;--r:25deg;--o:0.11;--b:0px"></i>
+    <i class="gs dia" style="left:15.8%;--s:42px;--t:28.5s;--d:-8.9s;--r:226deg;--o:0.21;--b:0px"></i>
+    <i class="gs sq" style="left:20.3%;--s:49px;--t:45.5s;--d:-1.9s;--r:309deg;--o:0.13;--b:0px"></i>
+    <i class="gs tri" style="left:25.5%;--s:29px;--t:32.2s;--d:-32.6s;--r:65deg;--o:0.17;--b:0px"></i>
+    <i class="gs dot" style="left:32.7%;--s:51px;--t:37.0s;--d:-2.5s;--r:21deg;--o:0.12;--b:0px"></i>
+    <i class="gs dia" style="left:39.2%;--s:53px;--t:32.3s;--d:-23.4s;--r:163deg;--o:0.14;--b:0px"></i>
+    <i class="gs sq" style="left:46.5%;--s:59px;--t:30.9s;--d:-23.0s;--r:189deg;--o:0.21;--b:2px"></i>
+    <i class="gs tri" style="left:51.2%;--s:56px;--t:45.6s;--d:-4.7s;--r:151deg;--o:0.19;--b:0px"></i>
+    <i class="gs dot" style="left:58.2%;--s:29px;--t:26.8s;--d:-26.7s;--r:275deg;--o:0.17;--b:0px"></i>
+    <i class="gs dia" style="left:63.8%;--s:62px;--t:39.9s;--d:-23.8s;--r:209deg;--o:0.15;--b:2px"></i>
+    <i class="gs sq" style="left:72.5%;--s:61px;--t:35.5s;--d:-26.6s;--r:22deg;--o:0.18;--b:2px"></i>
+    <i class="gs tri" style="left:79.0%;--s:52px;--t:42.4s;--d:-11.4s;--r:139deg;--o:0.18;--b:0px"></i>
+    <i class="gs dot" style="left:83.1%;--s:23px;--t:29.4s;--d:-4.7s;--r:21deg;--o:0.19;--b:0px"></i>
+    <i class="gs dia" style="left:88.5%;--s:28px;--t:33.8s;--d:-34.9s;--r:29deg;--o:0.15;--b:0px"></i>
+    <i class="gs sq" style="left:97.3%;--s:47px;--t:42.4s;--d:-34.6s;--r:100deg;--o:0.15;--b:0px"></i>
+    <img class="bos-wm" src="assets/img/bos-logo.webp" alt="">
+  </div>
   <!-- ============ LIBRARY ============ -->
   <section id="v-lib" class="hidden">
-    <header class="adm-top">
-      <a class="brand" href="#"><img src="assets/avatars/chef.webp" alt=""><span>BOS Quiz</span></a>
+    <header class="adm-top lib-top">
+      <a class="brand" href="#"><img class="brand-logo" src="assets/img/bos-quiz-logo.webp" alt="BOS Quiz"><span class="brand-name"><small>Admin</small></span></a>
       <div class="sp"></div>
-      <button class="btn" id="btn-new">＋ Create quiz</button>
-      <button class="link" id="btn-logout" title="Log out of admin">Log out</button>
+      <button class="link out" id="btn-logout" title="Log out of admin"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span>Log out</span></button>
     </header>
     <main class="lib">
-      <div class="lib-head">
-        <div><h1>My quizzes</h1><p class="muted" id="lib-count">Loading…</p></div>
-        <div class="lib-tools">
-          <div class="lib-sort" id="lib-sort" role="group" aria-label="Sort quizzes">
-            <span>Sort</span>
-            <button type="button" data-sort="updated">Last edited</button>
-            <button type="button" data-sort="created">Date created</button>
-            <button type="button" data-sort="az">A–Z</button>
-          </div>
-          <input id="lib-search" type="search" placeholder="Search quizzes…" autocomplete="off">
+      <section class="lib-hero">
+        <div class="hero-txt">
+          <p class="eyebrow">Game master dashboard</p>
+          <h1>My quizzes</h1>
+          <p class="hero-sub"><span id="lib-count">Loading…</span> · pick one to play on the big screen, or make a new one</p>
+          <button class="btn hero-btn" id="btn-new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create quiz</button>
+        </div>
+        <div class="hero-art" aria-hidden="true"><i class="o1"></i><img src="assets/img/mascot-buzzer.webp" alt=""></div>
+      </section>
+      <div class="lib-bar">
+        <label class="lib-find"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="lib-search" type="search" placeholder="Search quizzes…" autocomplete="off"></label>
+        <div class="lib-sort" id="lib-sort" role="group" aria-label="Sort quizzes">
+          <span>Sort</span>
+          <button type="button" data-sort="updated">Last edited</button>
+          <button type="button" data-sort="created">Date created</button>
+          <button type="button" data-sort="az">A–Z</button>
         </div>
       </div>
       <div class="lib-msg hidden" id="lib-msg"></div>
