@@ -189,7 +189,7 @@ function addLobbyChip(p) {
 function renderLobby() {
   playersBox.innerHTML = '';
   chips.clear();
-  if (!S.players.size) playersBox.innerHTML = '<div class="empty"><span class="ghosty"><img src="assets/img/mascot-buzzer.webp?v=3" alt="" onerror="this.onerror=null;this.src='assets/img/ghost.webp'"></span>Scan the QR code to join the game</div>';
+  if (!S.players.size) playersBox.innerHTML = '<div class="empty"><span class="ghosty"><img src="assets/img/mascot-buzzer.webp?v=3" alt="" onerror="this.onerror=null;this.src=\'assets/img/ghost.webp\'"></span>Scan the QR code to join the game</div>';
   [...S.players.values()].forEach(addLobbyChip);
   updateCount();
 }
