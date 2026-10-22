@@ -189,7 +189,7 @@ function addLobbyChip(p) {
 function renderLobby() {
   playersBox.innerHTML = '';
   chips.clear();
-  if (!S.players.size) playersBox.innerHTML = '<div class="empty"><span class="ghosty"><img src="assets/avatars/chef.webp" alt=""></span>Scan the QR code to join the game</div>';
+  if (!S.players.size) playersBox.innerHTML = '<div class="empty"><span class="ghosty"><img src="assets/img/mascot-buzzer.webp" alt=""></span>Scan the QR code to join the game</div>';
   [...S.players.values()].forEach(addLobbyChip);
   updateCount();
 }
@@ -711,7 +711,7 @@ function setGameButtons(on) {
 }
 
 // ---- auto-play: the scoreboard and the next question come by themselves (the host can still press Next)
-const AUTO = { on: (() => { try { return localStorage.getItem('bos-autoplay') !== '0'; } catch (e) { return true; } })(), PREVIEW: 5, REVEAL: 7, BOARD: 8 };
+const AUTO = { on: (() => { try { return localStorage.getItem('bos-autoplay2') !== '0'; } catch (e) { return true; } })(), PREVIEW: 5, REVEAL: 7, BOARD: 8 };
 let autoT = 0, autoI = 0;
 function paintAuto() {
   $('btn-auto').classList.toggle('on', AUTO.on);
@@ -722,7 +722,7 @@ function paintAuto() {
 }
 function setAuto(on) {
   AUTO.on = !!on;
-  try { localStorage.setItem('bos-autoplay', AUTO.on ? '1' : '0'); } catch (e) { /* */ }
+  try { localStorage.setItem('bos-autoplay2', AUTO.on ? '1' : '0'); } catch (e) { /* */ }
   paintAuto();
   if (!AUTO.on) stopAuto();
   if (S.phase === 'pre') { const my = S.qi, run = S.run; paintPreBar(); send({ t: 'pre', ...qPayload(), total: QUIZ.length }); if (AUTO.on) setTimeout(() => { if (AUTO.on && S.phase === 'pre' && S.qi === my && S.run === run) openQuestion(); }, qPreview() * 1000); }
