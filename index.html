@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/img/mascot-head.png">
   <link rel="stylesheet" href="css/common.css?v=19">
   <link rel="stylesheet" href="css/fonts-admin.css">
-  <link rel="stylesheet" href="css/admin.css?v=19">
+  <link rel="stylesheet" href="css/admin.css?v=20">
   <script src="lib/supabase.js"></script>
   <script type="importmap">{ "imports": { "three": "./lib/three/three.module.js", "three/addons/": "./lib/three/addons/" } }</script>
 </head>
@@ -67,7 +67,8 @@
   <section id="v-studio" class="hidden">
     <header class="adm-top studio-top">
       <button class="back" id="st-back" title="Back to my quizzes">← <span>My quizzes</span></button>
-      <input class="st-name" id="st-name" maxlength="80" placeholder="Quiz title" autocomplete="off">
+      <img class="st-logo" src="assets/img/bos-quiz-logo.webp?v=3" alt="BOS Quiz">
+      <input class="st-name" id="st-name" maxlength="80" placeholder="Quiz title" autocomplete="off" hidden>
       <nav class="st-tabs">
         <button data-tab="theme" class="on">🎨 Theme</button>
         <button data-tab="questions">❓ Questions <b id="st-qcount">0</b></button>
