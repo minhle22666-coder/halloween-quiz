@@ -6,7 +6,7 @@
   <title>BOS Quiz</title>
   <link rel="icon" href="assets/img/mascot-head.png">
   <link rel="stylesheet" href="css/common.css">
-  <link rel="stylesheet" href="css/host.css">
+  <link rel="stylesheet" href="css/host.css?v=23">
   <script src="lib/qrcode.js"></script>
   <script src="lib/supabase.js"></script>
   <script type="importmap">{ "imports": { "three": "./lib/three/three.module.js", "three/addons/": "./lib/three/addons/" } }</script>
@@ -87,6 +87,7 @@
         </div>
         <div class="board-side">
           <div class="board-list" id="board-list"></div>
+          <div class="board-rest" id="board-rest"><div class="rest-in" id="rest-in"></div></div>
           <div class="fastest" id="fastest"></div>
         </div>
       </div>
@@ -129,6 +130,6 @@
     <div id="editor-body"></div>
   </aside>
 
-  <script type="module" src="js/host.js?v=22"></script>
+  <script type="module" src="js/host.js?v=23"></script>
 </body>
 </html>
