@@ -569,6 +569,7 @@ function showBoard() {
     countUp(tot, p.score - (p.last ? p.last.gain : 0), p.score, 1200);
   });
   if (!top.length) box.innerHTML = '<div class="row" style="grid-template-columns:1fr;text-align:center">No players… only ghosts here 👻</div>';
+  renderRest(list.slice(5), 6);
   // fastest correct answer of this question
   let fastest = null;
   for (const p of list) if (p.last && p.last.ok && (!fastest || p.last.ms < fastest.last.ms)) fastest = p;
@@ -576,6 +577,30 @@ function showBoard() {
   send({ t: 'board' });
   setNext(S.qi + 1 >= QUIZ.length ? 'Final results 🏆' : 'Next question ▶');
   if (AUTO.on) autoAdvance(AUTO.BOARD);
+}
+
+// everyone below the top 5: compact grid that slowly scrolls when it does not fit
+function renderRest(rest, from) {
+  const box = $('board-rest'), inner = $('rest-in');
+  inner.innerHTML = '';
+  inner.classList.remove('roll');
+  box.classList.toggle('hidden', !rest.length);
+  rest.forEach((p, i) => {
+    const r = el('div', 'rr');
+    const rk = el('b'); rk.textContent = from + i;
+    const nm = el('span'); nm.textContent = p.name;
+    const sc = el('em'); sc.textContent = p.score;
+    r.append(rk, avatarEl(p.avatar), nm, sc);
+    inner.appendChild(r);
+  });
+  requestAnimationFrame(() => {
+    const over = inner.scrollHeight - box.clientHeight;
+    if (over > 4) {
+      inner.style.setProperty('--dist', `-${over + 8}px`);
+      inner.style.setProperty('--dur', `${Math.max(7, over / 22).toFixed(1)}s`);
+      inner.classList.add('roll');
+    }
+  });
 }
 
 // Kahoot-style chart: how many players picked each answer (+ % of all players)
