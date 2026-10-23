@@ -311,3 +311,34 @@ body.hubtheme #scr-final { background: linear-gradient(180deg, transparent, var(
 /* v12: the result banner sits under the question (top), not over the mascot */
 .result-banner { bottom: auto; top: 160px; font-size: clamp(20px, 1.9vw, 36px); padding: 5px 24px; box-shadow: 0 8px 24px rgba(0, 0, 0, .3); animation: bannerDrop .5s cubic-bezier(.2, 1.4, .4, 1) both; z-index: 3; }
 @keyframes bannerDrop { from { opacity: 0; transform: translateY(-16px) scale(.9); } }
+.players .empty .ghosty img { width: 120px; height: auto; }
+
+/* ---------- v23 scoreboard: always fits the screen + everyone listed ---------- */
+#scr-board { place-items: start center; padding-top: 2vh; }
+.board { height: calc(100vh - 2vh - 86px); display: flex; flex-direction: column; min-height: 0; }
+.board h2 { font-size: clamp(34px, min(4.6vw, 8vh), 84px); margin: 0; line-height: 1.05; }
+.board .sub { font-size: clamp(14px, 2.4vh, 20px); margin: .4vh 0 1.6vh; }
+.board-grid { flex: 1; min-height: 0; }
+.dist { min-height: 0; height: 100%; overflow: hidden; gap: 1.2vh; padding: 1.8vh 18px 1.4vh; }
+.dist-bars { min-height: 0; }
+.dcol { min-height: 0; gap: .8vh; }
+.dval b { font-size: clamp(20px, min(2.4vw, 5vh), 44px); }
+.dval small { font-size: clamp(12px, min(1.1vw, 2.2vh), 19px); }
+.dbar { min-height: 24px; }
+.dlbl { min-height: 0; padding: .8vh 10px; font-size: clamp(12px, min(1vw, 2.1vh), 17px); flex-shrink: 0; }
+.dist-foot { flex-shrink: 0; font-size: clamp(12px, min(1.1vw, 2.2vh), 18px); }
+.board-side { min-height: 0; }
+.board-list .row { font-size: clamp(14px, min(1.7vw, 2.9vh), 28px); grid-template-columns: 1.8em 2.2em 1fr auto auto; gap: 1vw; padding: .5vh 18px; margin-bottom: .9vh; }
+.board-list .row .av { width: 2.1em; height: 2.1em; }
+.board-rest { flex: 1; min-height: 0; overflow: hidden; position: relative; margin-top: .3vh; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 10px, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(180deg, transparent 0, #000 10px, #000 calc(100% - 14px), transparent); }
+.board-rest.hidden { display: none; }
+.rest-in { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7vh 10px; padding: 8px 0; }
+.rest-in.roll { animation: restRoll var(--dur, 10s) ease-in-out 1.2s infinite alternate; }
+@keyframes restRoll { 0%, 10% { transform: none; } 90%, 100% { transform: translateY(var(--dist)); } }
+.rr { display: flex; align-items: center; gap: 8px; min-width: 0; background: rgba(255, 255, 255, .07); border: 1px solid var(--line); border-radius: 10px; padding: .45vh 10px; font-size: clamp(12px, min(1.05vw, 2.2vh), 18px); font-weight: 600; }
+.rr b { min-width: 1.7em; color: var(--muted); font-weight: 700; text-align: right; }
+.rr .av { width: 1.9em; height: 1.9em; flex: none; }
+.rr span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rr em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+.board .fastest { margin-top: .8vh; font-size: clamp(13px, 2.2vh, 20px); flex-shrink: 0; }
+@media (max-width: 1100px) { .rest-in { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
